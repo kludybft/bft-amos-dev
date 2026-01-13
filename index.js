@@ -113,11 +113,11 @@ async function getValidToken() {
 
 // Step A: Admin Login Link
 app.get("/auth/login", (req, res) => {
-  const scopes = "reservations,integrations"; // Adjust scopes as needed
+  const scopes = "reservations integrations"; // Adjust scopes as needed
   const authUrl =
     `https://sys.akia.com/oauth/authorize?` +
     `client_id=${CLIENT_ID}&` +
-    `scope=${scopes}&` +
+    `scope=${encodeURIComponent(scopes)}&` +
     `response_type=code&` +
     `redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 
