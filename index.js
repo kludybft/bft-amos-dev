@@ -127,9 +127,14 @@ app.get("/auth/login", (req, res) => {
 // Step B: Callback from Akia
 app.get("/auth/callback", async (req, res) => {
   const { code } = req.query;
+  console.log("🔹 Callback received. Code:", code ? "Present" : "Missing");
+
   if (!code) return res.status(400).send("No code returned.");
 
   try {
+    console.log("🔹 Exchanging code for token...");
+
+    // 1. Prepare Payload
     const payload = querystring.stringify({
       code: code,
       grant_type: "authorization_code",
@@ -138,19 +143,39 @@ app.get("/auth/callback", async (req, res) => {
       redirect_uri: REDIRECT_URI,
     });
 
+    // 2. Request Token from Akia
     const response = await axios.post(`${AKIA_BASE_URL}/oauth/token`, payload, {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
+    console.log("✅ Token received from Akia.");
 
-    // Save to MongoDB
+    // 3. Save to MongoDB
+    console.log("🔹 Attempting to save to MongoDB...");
     await saveTokensToDB(response.data);
+    console.log("✅ Tokens saved to Database.");
 
     res.send(
       "<h1>✅ Login Successful!</h1><p>Tokens secured in Database. You can close this.</p>"
     );
   } catch (error) {
-    console.error("Auth Error:", error.response?.data || error.message);
-    res.status(500).send("Authentication failed. Check logs.");
+    // CAPTURE THE REAL ERROR
+    const errorData = error.response?.data || error.message;
+    const errorStatus = error.response?.status || 500;
+
+    console.error("❌ Auth Error Details:", JSON.stringify(errorData, null, 2));
+
+    // Send the DETAILED error to the browser so you can see it
+    res.status(errorStatus).send(`
+      <h1>❌ Authentication Failed</h1>
+      <p><b>Step Failed:</b> ${
+        error.response ? "Akia Token Exchange" : "Database Save"
+      }</p>
+      <p><b>Error Code:</b> ${errorStatus}</p>
+      <pre style="background: #f4f4f4; padding: 10px; border-radius: 5px;">
+        ${JSON.stringify(errorData, null, 2)}
+      </pre>
+      <p>Check your Choreo Environment Variables.</p>
+    `);
   }
 });
 
