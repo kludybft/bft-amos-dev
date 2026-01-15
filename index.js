@@ -225,75 +225,63 @@ function isTomorrow(dateStr) {
   return diffDays === 1;
 }
 
-app.post("/webhook", async (req, res) => {
-  const data = req.body;
-  console.log("📨 Webhook Received:", data.event_type);
+app.post('/webhook', async (req, res) => {
+    const data = req.body;
+    console.log("📨 Webhook Received:", data.event_type);
 
-  // 1. New Reservation
-  if (
-    data.event_type === "INSERT" &&
-    (data.status === "RESERVED" || data.status === "CONFIRMED")
-  ) {
-    await sendToAkia("/reservations", {
-      external_id: data.res_id,
-      status: "reserved",
-      guest: {
-        first_name: data.guest_first,
-        last_name: data.guest_last,
-        email: data.email,
-        phone: data.phone_mobile,
-      },
-      stay: {
-        arrival_date: data.arrival_date,
-        departure_date: data.departure_date,
-        room_type: data.room_category,
-      },
-    });
-  }
+    if (data.event_type === 'INSERT' && (data.status === 'RESERVED' || data.status === 'CONFIRMED')) {
+        
+        try {
+            // ====================================================
+            // STEP 1: CREATE/GET CUSTOMER (To get the customer_id)
+            // ====================================================
+            console.log("👤 Step 1: Creating Customer...");
+            
+            // Note: I am assuming the standard v3/customers endpoint based on your v4 reservations doc.
+            const customerPayload = {
+                first_name: data.guest_first,
+                last_name: data.guest_last,
+                email: data.email,
+                phone_number: data.phone_mobile // Akia usually expects 'phone_number'
+            };
 
-  // 2. Status Updates (Check-in / Check-out)
-  if (data.event_type === "UPDATE") {
-    const oldSt = data.old_status;
-    const newSt = data.new_status;
+            // We use v3 for customers (common pair with v4 reservations)
+            const customerResponse = await sendToAkia('/v3/customers', customerPayload);
+            
+            if (!customerResponse || !customerResponse.id) {
+                throw new Error("Failed to retrieve Customer ID from Akia.");
+            }
+            
+            const akiaCustomerId = customerResponse.id;
+            console.log("✅ Customer Found/Created. ID:", akiaCustomerId);
 
-    if (oldSt === "RESERVED" && newSt === "CHECKED_IN") {
-      await sendToAkia(
-        `/reservations/${data.res_id}`,
-        { status: "checked_in" },
-        "PATCH"
-      );
+            // ====================================================
+            // STEP 2: CREATE RESERVATION (Flat Structure from Docs)
+            // ====================================================
+            console.log("🏨 Step 2: Creating Reservation...");
+
+            const reservationPayload = {
+                // REQUIRED FIELDS (From your screenshot)
+                customer_id: akiaCustomerId,      // The ID we just got
+                arrival_date: data.arrival_date,  // Format: YYYY-MM-DD
+                departure_date: data.departure_date,
+                extern_id: data.res_id,           // "A unique external identifier"
+                
+                // OPTIONAL FIELDS (Mapped from your data)
+                room_type: data.room_category,    // Mapping 'category' to 'room_type'
+                status: "reserved"                // Explicit status
+            };
+
+            const resResponse = await sendToAkia('/v4/reservations', reservationPayload);
+            console.log("🚀 Reservation Created Successfully!", resResponse);
+
+        } catch (error) {
+            console.error("❌ Process Failed:");
+            console.error(JSON.stringify(error.response?.data || error.message, null, 2));
+        }
     }
-    if (oldSt === "CHECKED_IN" && newSt === "CHECKED_OUT") {
-      await sendToAkia(
-        `/reservations/${data.res_id}`,
-        { status: "checked_out" },
-        "PATCH"
-      );
-    }
-  }
 
-  // 3. Digital Keys
-  if (
-    data.event_type === "KEY_ISSUED" &&
-    (data.key_status === "ISSUED" || data.key_status === "DELIVERED")
-  ) {
-    await sendToAkia("/integrations/events", {
-      event_name: "digital_key_delivery",
-      guest: { reservation_id: data.res_id },
-    });
-  }
-
-  // 4. Pre-Arrival
-  if (data.event_type === "SCHEDULED_CHECK") {
-    if (data.status === "RESERVED" && isTomorrow(data.arrival_date)) {
-      await sendToAkia("/integrations/events", {
-        event_name: "pre_arrival_checkin",
-        guest: { reservation_id: data.res_id },
-      });
-    }
-  }
-
-  res.json({ status: "received" });
+    res.json({ status: "received" });
 });
 
 // START SERVER
