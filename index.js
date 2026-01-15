@@ -113,7 +113,8 @@ async function getValidToken() {
 
 // Step A: Admin Login Link
 app.get("/auth/login", (req, res) => {
-  const scopes = "customers:read,customers:write"; // Adjust scopes as needed
+  // Updated scopes to include customers and reservations
+  const scopes = "customers:read,customers:write,properties:read,properties:write"; 
   const authUrl =
     `https://sys.akia.com/oauth/authorize?` +
     `client_id=${CLIENT_ID}&` +
@@ -216,118 +217,156 @@ async function sendToAkia(endpoint, payload, method = "POST") {
 // ==========================================
 // 6. BUSINESS LOGIC (Webhooks)
 // ==========================================
-function isTomorrow(dateStr) {
-  if (!dateStr) return false;
-  const today = new Date();
-  const target = new Date(dateStr);
-  const diffTime = target - today;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays === 1;
+
+// Helper for sending Events to Akia
+async function triggerAkiaEvent(eventName, resId) {
+    console.log(`🔔 Triggering Event: ${eventName}`);
+    await sendToAkia("/integrations/events", {
+        event_name: eventName,
+        guest: { reservation_id: resId }
+    });
+}
+
+// Helper to check if date is tomorrow
+function isTomorrow(dateString) {
+    if (!dateString) return false;
+    const today = new Date();
+    const target = new Date(dateString);
+    const diffTime = target - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    return diffDays === 1; 
 }
 
 app.post("/webhook", async (req, res) => {
   const data = req.body;
-  console.log("📨 Webhook Received:", data.event_type);
+  console.log(`📨 Event: ${data.event_type} | Res ID: ${data.res_id}`);
 
-  // ==================================================================
-  // 1. NEW RESERVATION (Two-Step Sync: Customer -> Reservation)
-  // ==================================================================
-  if (
-    data.event_type === "INSERT" &&
-    (data.status === "RESERVED" || data.status === "CONFIRMED")
-  ) {
-    try {
-      console.log("👤 Step 1: Creating/Finding Customer...");
-
-      // Prepare Customer Payload (v3/customers)
-      // Note: Akia typically uses 'phone_number', not 'phone_mobile'
-      const customerPayload = {
+  try {
+    // ==================================================================
+    // 1. NEW RESERVATION CONFIRMATION
+    // Spreadsheet Row: 1
+    // Logic: INSERT + RESERVED/CONFIRMED
+    // ==================================================================
+    if (
+      data.event_type === "INSERT" &&
+      (data.status === "RESERVED" || data.status === "CONFIRMED")
+    ) {
+      console.log("🔹 Processing New Reservation...");
+      
+      // Step A: Create/Find Customer
+      const customerResponse = await sendToAkia("/v3/customers", {
         first_name: data.guest_first,
         last_name: data.guest_last,
         email: data.email,
-        phone_number: data.phone_mobile, 
-      };
+        phone_number: data.phone_mobile,
+      });
 
-      // CALL 1: Send to Customer API
-      const customerResponse = await sendToAkia("/v3/customers", customerPayload);
+      if (!customerResponse?.id) throw new Error("Could not create Customer");
 
-      // Validation: Did we get an ID back?
-      if (!customerResponse || !customerResponse.id) {
-        throw new Error("Failed to retrieve Customer ID from Akia.");
+      // Step B: Create Reservation linked to Customer
+      await sendToAkia("/v4/reservations", {
+        customer_id: customerResponse.id,
+        extern_id: data.res_id,
+        arrival_date: data.arrival_date,
+        departure_date: data.departure_date,
+        room_type: data.room_category,
+        status: "reserved",
+        guest_count: 1
+      });
+      console.log("✅ New Reservation Synced");
+    }
+
+    // ==================================================================
+    // 2. STATUS CHANGES (Check-In, Check-Out, Cancellation)
+    // Spreadsheet Rows: 4, 8, 9
+    // Logic: UPDATE event
+    // ==================================================================
+    if (data.event_type === "UPDATE") {
+      const oldSt = data.old_status;
+      const newSt = data.new_status;
+      const endpoint = `/v4/reservations/${data.res_id}`; 
+
+      // Row 4: Successful Check-In
+      if (oldSt === "RESERVED" && newSt === "CHECKED_IN") {
+        await sendToAkia(endpoint, { status: "checked_in" }, "PATCH");
+        console.log("✅ Set status to Checked In");
       }
 
-      const akiaCustomerId = customerResponse.id;
-      console.log("✅ Customer ID obtained:", akiaCustomerId);
+      // Row 8: Check-Out / Thanks & Survey
+      if (oldSt === "CHECKED_IN" && newSt === "CHECKED_OUT") {
+        await sendToAkia(endpoint, { status: "checked_out" }, "PATCH");
+        console.log("✅ Set status to Checked Out");
+      }
 
-      console.log("🏨 Step 2: Creating Reservation...");
+      // Row 9: Cancellation Acknowledgement
+      if (newSt === "CANCELLED") {
+        await sendToAkia(endpoint, { status: "cancelled" }, "PATCH");
+        console.log("✅ Set status to Cancelled");
+      }
 
-      // Prepare Reservation Payload (v4/reservations - FLAT structure)
-      const reservationPayload = {
-        // REQUIRED FIELDS (From your Docs)
-        customer_id: akiaCustomerId,      // The ID we just got from Step 1
-        arrival_date: data.arrival_date,  // Format: YYYY-MM-DD
-        departure_date: data.departure_date,
-        extern_id: data.res_id,           // "A unique external identifier" (Your Res ID)
-        
-        // OPTIONAL / MAPPED FIELDS
-        room_type: data.room_category,    // Mapping 'category' -> 'room_type'
-        status: "reserved",
-        guest_count: 1                    // Default to 1 if not provided
-      };
-
-      // CALL 2: Send to Reservation API
-      await sendToAkia("/v4/reservations", reservationPayload);
-      console.log("🚀 Reservation Synced Successfully!");
-
-    } catch (error) {
-      console.error("❌ Sync Failed:");
-      // Log the specific error from Akia to help debugging
-      console.error(JSON.stringify(error.response?.data || error.message, null, 2));
+      // Row 10: Reservation Modification (Dates or Room changed)
+      if (
+        data.new_arrival_date !== data.old_arrival_date ||
+        data.new_room_type !== data.old_room_type
+      ) {
+        // Only run if the key fields actually exist in the update payload
+        if (data.new_arrival_date) {
+            await sendToAkia(endpoint, {
+              arrival_date: data.new_arrival_date,
+              departure_date: data.new_departure_date,
+              room_type: data.new_room_type
+            }, "PATCH");
+            console.log("✅ Updated Reservation Details");
+        }
+      }
     }
-  }
 
-  // ==================================================================
-  // 2. STATUS UPDATES (Check-in / Check-out)
-  // ==================================================================
-  if (data.event_type === "UPDATE") {
-    const oldSt = data.old_status;
-    const newSt = data.new_status;
-    
-    // Note: We are attempting to patch by 'res_id' (your ID). 
-    // If Akia requires their internal ID for patches, this endpoint might need 
-    // to be a search first. For now, we assume extern_id works or is handled.
-    const endpoint = `/v4/reservations/${data.res_id}`; 
-
-    if (oldSt === "RESERVED" && newSt === "CHECKED_IN") {
-      await sendToAkia(endpoint, { status: "checked_in" }, "PATCH");
+    // ==================================================================
+    // 3. DIGITAL KEYS
+    // Spreadsheet Row: 5
+    // ==================================================================
+    if (
+      data.event_type === "KEY_ISSUED" &&
+      (data.key_status === "ISSUED" || data.key_status === "DELIVERED")
+    ) {
+      await triggerAkiaEvent("digital_key_delivery", data.res_id);
+      console.log("✅ Digital Key Event Sent");
     }
-    if (oldSt === "CHECKED_IN" && newSt === "CHECKED_OUT") {
-      await sendToAkia(endpoint, { status: "checked_out" }, "PATCH");
-    }
-  }
 
-  // ==================================================================
-  // 3. DIGITAL KEYS & PRE-ARRIVAL (Unchanged Logic)
-  // ==================================================================
-  // Note: Verify if '/integrations/events' has a v2/v3 version in your docs.
-  
-  if (
-    data.event_type === "KEY_ISSUED" &&
-    (data.key_status === "ISSUED" || data.key_status === "DELIVERED")
-  ) {
-    await sendToAkia("/integrations/events", {
-      event_name: "digital_key_delivery",
-      guest: { reservation_id: data.res_id },
-    });
-  }
+    // ==================================================================
+    // 4. SCHEDULED CHECKS (Pre-Arrival, Arrival, Departure, Mid-Stay)
+    // Spreadsheet Rows: 2, 3, 6, 7
+    // ==================================================================
+    if (data.event_type === "SCHEDULED_CHECK" && data.status !== "CANCELLED") {
+      
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const arrival = data.arrival_date;
+      const departure = data.departure_date;
 
-  if (data.event_type === "SCHEDULED_CHECK") {
-    if (data.status === "RESERVED" && isTomorrow(data.arrival_date)) {
-      await sendToAkia("/integrations/events", {
-        event_name: "pre_arrival_checkin",
-        guest: { reservation_id: data.res_id },
-      });
+      // Row 2: Pre-Arrival (T-24h)
+      if (isTomorrow(arrival)) {
+        await triggerAkiaEvent("pre_arrival_checkin", data.res_id);
+      }
+
+      // Row 3: Day of Arrival Welcome
+      if (arrival === today) {
+        await triggerAkiaEvent("arrival_welcome", data.res_id);
+      }
+
+      // Row 7: Departure Morning Info
+      if (departure === today && data.status === "CHECKED_IN") {
+        await triggerAkiaEvent("departure_morning", data.res_id);
+      }
+
+      // Row 6: Mid-Stay "Everything OK?"
+      if (today > arrival && today < departure && data.status === "CHECKED_IN") {
+         await triggerAkiaEvent("mid_stay_check", data.res_id);
+      }
     }
+
+  } catch (error) {
+    console.error("❌ Error processing webhook:", error.message);
+    if (error.response) console.error(JSON.stringify(error.response.data, null, 2));
   }
 
   res.json({ status: "received" });
