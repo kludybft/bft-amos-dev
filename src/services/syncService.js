@@ -1,6 +1,8 @@
 const akiaService = require("./akiaService");
 const hubspotService = require("./hubspotService");
-const HS = require("../constants/hubspotProps");
+const config = require("../config/env");
+
+const HS = config.HUBSPOT.PIPELINE_CONFIG;
 
 /**
  * 1. SYNC RESERVATION (Create or Update)
