@@ -77,7 +77,7 @@ exports.getSpaAppointment = async (source) => {
     return res.data.appointments || res.data.value || res.data || [];
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      console.log("No spa appointment found (404).");
+      console.log("No spa appointment found.");
       return [];
     }
 

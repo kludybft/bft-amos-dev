@@ -7,8 +7,8 @@ const webhookController = require("../controllers/webhookController");
 router.get("/auth/login", authController.login);
 router.get("/auth/callback", authController.callback);
 
-// Setup Route (One time use)
-router.get("/setup-agilysys-webhook", authController.setupWebhook);
+// Setup Route
+router.get("/register-webhook", authController.registerWebhook);
 
 // Main Webhook
 router.post("/webhook", webhookController.webhook);

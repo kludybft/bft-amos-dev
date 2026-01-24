@@ -1,20 +1,20 @@
 const syncService = require("../services/syncService");
 const agilysysService = require("../services/agilysysService");
 
-// --- 1. ID FINDER ---
+// 1. ID FINDER
 // Finds the ID no matter where Agilysys hides it in the webhook
 const findConfirmationId = (data) => {
   // Check Root
   if (data.confirmationId) return data.confirmationId;
   if (data.confirmationNumber) return data.confirmationNumber;
 
-  // Check 'content' wrapper
+  // Check content wrapper
   if (data.content) {
     if (data.content.confirmationId) return data.content.confirmationId;
     if (data.content.confirmationNumber) return data.content.confirmationNumber;
   }
 
-  // Check 'payload' wrapper
+  // Check payload wrapper
   if (data.payload) {
     if (data.payload.confirmationId) return data.payload.confirmationId;
     if (data.payload.confirmationNumber) return data.payload.confirmationNumber;
@@ -23,27 +23,27 @@ const findConfirmationId = (data) => {
   return null;
 };
 
-// --- 2. DATA MAPPER (For the API Response) ---
-// Transforms the "Fat" API response into your App's clean format
+// 2. DATA MAPPER
+// Transforms the API response to match format
 const mapAgilysysResponse = (apiResponse) => {
   const data = apiResponse;
 
-  // Handle Guest Array (Primary or First)
+  // Guest Array
   const guests = Array.isArray(data.guestInfo) ? data.guestInfo : [];
   const primaryGuest =
     guests.find((g) => g.primaryGuest === "true") || guests[0] || {};
 
-  // Handle Offers Array (Room Type)
+  // Offers Array
   const primaryOffer =
     data.offers && data.offers.length > 0 ? data.offers[0] : {};
 
   return {
     confirmationNumber: data.confirmationId,
+    reservationID: data.reservationID,
     status: data.status,
     depositSchedule: data.createDate,
     villaType: primaryOffer.roomType,
     villaNumber: primaryOffer.roomNum,
-    reservationID: data.reservationID,
 
     guestInfo: {
       firstName: primaryGuest.firstName || "Test",
@@ -67,15 +67,12 @@ const mapAgilysysResponse = (apiResponse) => {
   };
 };
 
-// --- 3. MAIN HANDLER ---
+// 3. MAIN HANDLER
 exports.webhook = async (req, res) => {
   try {
     const event = req.body;
 
-    // Step A: Log Raw Payload (For Debugging)
-    console.log("RAW WEBHOOK:", JSON.stringify(event, null, 2));
-
-    // Step B: Hunt for the ID
+    // Hunt for the ID
     const confirmationId = findConfirmationId(event);
 
     if (!confirmationId) {
@@ -83,11 +80,7 @@ exports.webhook = async (req, res) => {
       return res.status(200).send("Skipped - No ID");
     }
 
-    console.log(
-      `Found ID: ${confirmationId}. Fetching full details from API...`,
-    );
-
-    // Step C: The "Fetch-Back" (Get the Perfect Data)
+    // Get full reservation data
     const fullReservationData =
       await agilysysService.getReservation(confirmationId);
 
@@ -95,7 +88,7 @@ exports.webhook = async (req, res) => {
       console.error(
         `FETCH FAILED: Could not retrieve details for ${confirmationId}`,
       );
-      // We return 200 to prevent infinite retries from Agilysys
+      // Return 200 to prevent infinite retries
       return res.status(200).send("Fetch Failed");
     }
 
@@ -106,20 +99,15 @@ exports.webhook = async (req, res) => {
       spaItems: spaData,
     };
 
-    // Step D: Map the Perfect Data
+    // Map the clean data
     const cleanData = mapAgilysysResponse(mergedData);
 
-    // Step E: Determine Action based on Event Type OR Status
-    // Priority: Explicit Event Type -> Infer from Status
+    // Determine action based on event type OR status
     let eventType = event.eventType;
     if (!eventType) {
       if (cleanData.status === "Canceled") eventType = "RESERVATION_CANCELLED";
       else eventType = "RESERVATION_UPDATED";
     }
-
-    console.log(
-      `🚀 Processing ${eventType} for ${cleanData.confirmationNumber}`,
-    );
 
     switch (eventType) {
       case "RESERVATION_CREATED":

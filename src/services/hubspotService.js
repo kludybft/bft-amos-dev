@@ -3,17 +3,15 @@ const config = require("../config/env");
 
 const HS = config.HUBSPOT.PIPELINE_CONFIG;
 
-// 1. PUSH DEAL (Create or Update)
-// Handles the logic to Find -> Update (and replace items) OR Create.
-
+// Push deal create or update
 exports.pushDeal = async (data, extraUpdates = {}) => {
   const logId = data.confirmationNumber;
 
   try {
-    // A. SEARCH for existing Deal
+    // Search for existing deal
     const dealId = await findDealIdByConfirmationNumber(logId);
 
-    // B. PREPARE PROPERTIES (Common for both Create and Update)
+    // Prepare props to match HS props
     const dealProperties = {
       dealname: `${data.lastName} ${logId}`,
       confirmation_number: data.confirmationNumber,
@@ -34,11 +32,8 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
 
     let currentDealId = dealId;
 
-    // C. UPDATE or CREATE Logic
+    // UPDATE or CREATE Logic
     if (currentDealId) {
-      console.log(`HubSpot: Updating Deal ${currentDealId}`);
-
-      // 1. Update the Deal Properties
       await axios.patch(
         `https://api.hubapi.com/crm/v3/objects/deals/${currentDealId}`,
         { properties: dealProperties },
@@ -82,9 +77,7 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
   }
 };
 
-// 2. UPDATE DEAL STATUS (For Cancellations)
-// specific function to move a deal to "Closed Lost" or "Cancelled"
-
+// 2. Update deal status
 exports.updateDealStatus = async (confirmationNumber, newStageId) => {
   try {
     const dealId = await findDealIdByConfirmationNumber(confirmationNumber);
@@ -111,7 +104,7 @@ exports.updateDealStatus = async (confirmationNumber, newStageId) => {
   }
 };
 
-// --- HELPER FUNCTIONS ---
+// Helper Functions
 
 // Helper: Find Deal ID by Confirmation Number property
 async function findDealIdByConfirmationNumber(confNum) {
@@ -164,7 +157,6 @@ async function deleteAssociatedLineItems(dealId) {
 
     console.log(`HubSpot: Cleared ${lineItemIds.length} old line items.`);
   } catch (e) {
-    // If 404, it just means no associations existed, which is fine.
     if (e.response?.status !== 404) {
       console.warn("HubSpot Line Item Cleanup Warning:", e.message);
     }
@@ -174,31 +166,30 @@ async function deleteAssociatedLineItems(dealId) {
 // Helper: Create a single Line Item and associate it
 async function createUnifiedLineItem(dealId, item) {
   const properties = {
-    // --- Standard HubSpot Fields ---
+    // Standard HubSpot Fields
+    confirmation_number: item.confirmationNumber || null,
     name: item.dealItemName,
-    // Safety Net: Default to "0" if price is missing to prevent API errors
     price: item.price || "0",
     quantity: "1",
 
-    // --- Common Custom Fields ---
+    // Common Custom Fields
     item_type: item.itemType || null,
     tax_amount: item.taxAmount || null,
     deposit_policy: item.depositPolicy || null,
     sales_rep_hs_id: item.salesRepHsId || null,
     sales_rep_ag_id: item.salesRepAgId || null,
 
-    // --- NEW: Spa Specific Fields ---
-    confirmation_number: item.confirmationNumber || null,
+    // Spa Specific Fields
     start_date_time: item.startDateTime || null,
     end_date_time: item.endDateTime || null,
-
-    // --- Existing Specific Fields ---
-    date_of_night: item.dateOfNight || null,
-    villa_type: item.villaType || null,
-    post_type: item.postType || null,
     spa_service: item.spaService || null,
     gratuity_amount: item.gratuityAmount || null,
     therapist_id: item.therapistId || null,
+
+    // Existing Specific Fields
+    date_of_night: item.dateOfNight || null,
+    villa_type: item.villaType || null,
+    post_type: item.postType || null,
     assigned_room: item.assignedRoom || null,
   };
 

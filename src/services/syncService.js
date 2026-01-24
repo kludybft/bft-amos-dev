@@ -4,13 +4,10 @@ const config = require("../config/env");
 
 const HS = config.HUBSPOT.PIPELINE_CONFIG;
 
-/**
- * 1. SYNC RESERVATION (Create or Update)
- * Handles mapping line items, syncing to Akia, and pushing to HubSpot.
- */
+// 1. Sync reservation
 exports.syncReservation = async (dealData) => {
   try {
-    // A. GENERATE LINE ITEMS
+    // A. Generate line items
     const arrival = new Date(dealData.stayInfo.arrivalDate);
     const departure = new Date(dealData.stayInfo.departureDate);
 
@@ -38,13 +35,14 @@ exports.syncReservation = async (dealData) => {
     }
 
     const addOns = (dealData.addOnItems || []).map((addOnItem) => ({
-      //   dealItemName: "Add-on",
-      //   itemType: "addon",
-      //   price: addOnItem.price,
-      //   taxAmount: addOnItem.taxAmount || null,
-      //   postType: addOnItem.postType || null,
-      //   salesRepHsId: "12345678",
-      //   salesRepAgId: "AGUSER-9876",
+      confirmationNumber: addOnItem.confirmationNumber,
+      dealItemName: "Add-on",
+      itemType: "addon",
+      price: addOnItem.price,
+      taxAmount: addOnItem.taxAmount,
+      postType: addOnItem.postType,
+      salesRepHsId: "12345678",
+      salesRepAgId: "AGUSER-9876",
     }));
 
     const spaItems = (dealData.spaItems || []).map((spaItem) => ({
@@ -64,10 +62,10 @@ exports.syncReservation = async (dealData) => {
 
     allLineItems.push(...addOns, ...spaItems);
 
-    // B. AKIA SYNC
+    // B. Akia sync
     let akiaLink = null;
     try {
-      // 1. Create/Update Customer
+      // Create customer
       const akiaGuest = await akiaService.send("/v3/customers", {
         first_name: dealData.guestInfo.firstName,
         last_name: dealData.guestInfo.lastName,
@@ -94,7 +92,7 @@ exports.syncReservation = async (dealData) => {
       console.error("Akia Sync Warning:", akiaErr.message);
     }
 
-    // C. HUBSPOT SYNC
+    // C. Hubspot sync
     const dealPayload = {
       confirmationNumber: dealData.confirmationNumber,
       arrivalDate: dealData.stayInfo.arrivalDate,
@@ -122,16 +120,10 @@ exports.syncReservation = async (dealData) => {
   }
 };
 
-/**
- * 2. HANDLE CANCELLATION
- * Updates Akia status to 'cancelled' and moves HubSpot deal to 'Closed Lost'
- */
+// 2. Handle cancellation
 exports.handleCancellation = async (dealData) => {
   try {
-    // A. AKIA CANCELLATION
-    // We try to update the reservation status.
-    // Note: Verify if your akiaService.send supports method overrides (PUT/PATCH).
-    // If not, standard POST often acts as an upsert if extern_id matches.
+    // A. Akia cancellation
     try {
       await akiaService.send("/v4/reservations", {
         extern_id: dealData.confirmationNumber,
@@ -142,9 +134,7 @@ exports.handleCancellation = async (dealData) => {
       console.warn("Akia Cancel Warning:", e.message);
     }
 
-    // B. HUBSPOT CANCELLATION
-    // We specifically move the deal stage to "Closed Lost"
-    // Make sure you implemented 'updateDealStatus' in your hubspotService!
+    // B. Hubspot cancellation
     await hubspotService.updateDealStatus(
       dealData.confirmationNumber,
       "closedlost",

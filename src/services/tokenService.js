@@ -24,7 +24,6 @@ exports.getValidToken = async () => {
 
   // Refresh if expired
   if (Date.now() >= doc.expires_at) {
-    console.log("Akia Token expired. Refreshing...");
     try {
       const res = await axios.post(
         `${config.AKIA.BASE_URL}/oauth/token`,

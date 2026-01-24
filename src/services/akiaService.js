@@ -14,7 +14,6 @@ exports.send = async (endpoint, payload, method = "POST") => {
         "Content-Type": "application/json",
       },
     });
-    console.log(`Akia Success: ${endpoint}`);
     return res.data;
   } catch (e) {
     console.error(`Akia Failed: ${e.response?.status || e.message}`);

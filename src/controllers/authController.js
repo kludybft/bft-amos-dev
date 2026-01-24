@@ -33,7 +33,7 @@ exports.callback = async (req, res) => {
   }
 };
 
-exports.setupWebhook = async (req, res) => {
+exports.registerWebhook = async (req, res) => {
   const MY_URL =
     "https://3d1ddc13-060d-4411-992a-9ad6545cdf18-dev.e1-us-east-azure.choreoapis.dev/amos-interfacing/bft-amos-dev/v1.0/webhook";
 
