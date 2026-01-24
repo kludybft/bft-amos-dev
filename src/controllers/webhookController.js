@@ -81,8 +81,10 @@ exports.webhook = async (req, res) => {
     }
 
     // Get full reservation data
-    const fullReservationData =
-      await agilysysService.getReservation(confirmationId);
+    const fullReservationData = await agilysysService.getReservation(
+      confirmationId,
+      event.guestInfo.lastName,
+    );
 
     if (!fullReservationData) {
       console.error(

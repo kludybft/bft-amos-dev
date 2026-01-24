@@ -40,7 +40,7 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
         { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
       );
 
-      // 2. CLEAR Old Line Items (Crucial for Updates!)
+      // 2. Clear old line items
       // If dates changed, we must remove old "Night" items to avoid duplicates.
       await deleteAssociatedLineItems(currentDealId);
     } else {

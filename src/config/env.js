@@ -26,7 +26,7 @@ module.exports = {
   // Agilysys
   AGILYSYS: {
     BOOKING_AUTH_URL: "https://api.rguest.com/versa/auth/v1/authorize",
-    BOOKING_URL: "https://api.rguest.com/versa/booking/v1/reservation",
+    BOOKING_URL: "https://api.rguest.com/versa/booking/v1",
     SPA_AUTH_URL: "https://api.rguest.com/spa/authservice/v1/authorize",
     SPA_URL: "https://api.rguest.com/spaservices/appointments/source",
     SUB_URL: "https://api.rguest.com/platform/v1/subscriptions",

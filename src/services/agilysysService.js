@@ -39,14 +39,14 @@ exports.getSpaAuth = async () => {
   }
 };
 
-exports.getReservation = async (confirmationNumber) => {
+exports.getReservation = async (confirmationNumber, guestName) => {
   try {
     const { token, session } = await exports.getBookingAuth();
     const headers = { Authorization: `Bearer ${token}` };
     if (session) headers["SessionId"] = session;
 
     const res = await axios.get(
-      `${config.AGILYSYS.BOOKING_URL}/${confirmationNumber}`,
+      `${config.AGILYSYS.BOOKING_URL}/GetReservation?confirmation=${confirmationNumber}&guestName=${guestName}`,
       { headers },
     );
 
