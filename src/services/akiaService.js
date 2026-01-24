@@ -7,7 +7,7 @@ exports.send = async (endpoint, payload, method = "POST") => {
     const token = await tokenService.getValidToken();
     const res = await axios({
       method,
-      url: `${config.AKIA.BASE_URL}/v1${endpoint}`,
+      url: `${config.AKIA.BASE_URL}/${endpoint}`,
       data: payload,
       headers: {
         Authorization: `Bearer ${token}`,

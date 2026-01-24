@@ -34,10 +34,11 @@ exports.callback = async (req, res) => {
 };
 
 exports.setupWebhook = async (req, res) => {
-  const MY_URL = "https://YOUR-CHOREO-APP.choreoapps.dev/webhook";
+  const MY_URL =
+    "https://3d1ddc13-060d-4411-992a-9ad6545cdf18-dev.e1-us-east-azure.choreoapis.dev/amos-interfacing/bft-amos-dev/v1.0/webhook";
 
   try {
-    const { token, session } = await agilysysService.getAuth();
+    const { token, session } = await agilysysService.getBookingAuth();
     const headers = {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -52,7 +53,6 @@ exports.setupWebhook = async (req, res) => {
         "RESERVATION_CANCELLED",
         "CHECK_IN",
         "CHECK_OUT",
-        "KEY_ISSUED",
       ],
     };
     const apiRes = await axios.post(config.AGILYSYS.SUB_URL, payload, {

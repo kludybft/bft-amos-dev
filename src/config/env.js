@@ -20,17 +20,15 @@ module.exports = {
       default_pipeline: "default",
       initial_stage: "appointmentscheduled",
       prop_akia_url: "akia_url",
-      prop_confirmation_number: "confirmation_number",
-      prop_arrival: "arrival_date",
-      prop_villa: "villa",
-      prop_villa_type: "villa_type",
     },
   },
 
   // Agilysys
   AGILYSYS: {
-    AUTH_URL: "https://api.rguest.com/versa/auth/v1/authorize",
+    BOOKING_AUTH_URL: "https://api.rguest.com/versa/auth/v1/authorize",
     BOOKING_URL: "https://api.rguest.com/versa/booking/v1/reservation",
+    SPA_AUTH_URL: "https://api.rguest.com/spa/authservice/v1/authorize",
+    SPA_URL: "https://api.rguest.com/spaservices/appointments/source",
     SUB_URL: "https://api.rguest.com/platform/v1/subscriptions",
     CREDENTIALS: {
       Client: process.env.AGILYSYS_CLIENT,

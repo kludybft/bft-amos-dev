@@ -1,133 +1,149 @@
-const akiaService = require("../services/akiaService");
-const hubspotService = require("../services/hubspotService");
+const syncService = require("../services/syncService");
 const agilysysService = require("../services/agilysysService");
-const config = require("../config/env");
 
-const HS = config.HUBSPOT.PIPELINE_CONFIG;
+// --- 1. ID FINDER ---
+// Finds the ID no matter where Agilysys hides it in the webhook
+const findConfirmationId = (data) => {
+  // Check Root
+  if (data.confirmationId) return data.confirmationId;
+  if (data.confirmationNumber) return data.confirmationNumber;
 
-exports.handleWebhook = async (req, res) => {
-  const hookData = req.body;
-  const confirmationNumber = hookData.confirmationNumber;
-  const eventType = hookData.event_type || hookData.eventType || "UNKNOWN";
-
-  console.log(`Webhook: ${eventType} | ID: ${confirmationNumber}`);
-
-  if (!confirmationNumber) return res.status(200).send("No ID found");
-
-  try {
-    let fullData = hookData;
-    // Fetch full data if missing guest info (unless it's a key event)
-    if (!hookData.guestInfo && !eventType.includes("KEY")) {
-      fullData = await agilysysService.fetchDetails(confirmationNumber);
-      if (!fullData) return res.status(200).send("Fetch Failed");
-    }
-
-    const reservation = {
-      res_id: fullData.reservationID || confirmationNumber,
-      status: fullData.status,
-      guest_first: fullData.guestInfo?.firstName || "Guest",
-      guest_last: fullData.guestInfo?.lastName || "Unknown",
-      email: fullData.guestInfo?.email,
-      phone: fullData.guestInfo?.mobilePhone || fullData.guestInfo?.phone,
-      arrival: fullData.stayInfo?.arrivalDate,
-      departure: fullData.stayInfo?.departureDate,
-      room: fullData.stayInfo?.roomType,
-      price: fullData.stayInfo?.totalAmount || fullData.depositAmount,
-    };
-
-    // --- LOGIC ROUTER ---
-
-    // 1. NEW RESERVATION
-    if (
-      eventType.includes("CREATED") ||
-      reservation.status === "RESERVED" ||
-      reservation.status === "CONFIRMED"
-    ) {
-      console.log(`New Reservation: ${reservation.guest_last}`);
-
-      const akiaGuest = await akiaService.send("/v3/customers", {
-        first_name: reservation.guest_first,
-        last_name: reservation.guest_last,
-        email: reservation.email,
-        phone_number: reservation.phone,
-      });
-
-      if (akiaGuest?.id) {
-        await akiaService.send("/v4/reservations", {
-          customer_id: akiaGuest.id,
-          extern_id: reservation.res_id,
-          arrival_date: reservation.arrival,
-          departure_date: reservation.departure,
-          room_type: reservation.room,
-          status: "reserved",
-          guest_count: 1,
-        });
-
-        const akiaLink = `https://app.akia.com/conversation/${akiaGuest.id}`;
-
-        await hubspotService.pushDeal(reservation, {
-          [HS.prop_akia_url]: akiaLink,
-          [HS.prop_status]: reservation.status,
-        });
-      }
-    }
-
-    // 2. UPDATES (Check-in/out/Cancel)
-    else if (
-      eventType.includes("UPDATE") ||
-      eventType.includes("CHECK") ||
-      eventType.includes("CANCEL")
-    ) {
-      const updates = {};
-      const endpt = `/v4/reservations/${reservation.res_id}`;
-
-      // Map Status
-      if (reservation.status === "CHECKED_IN") {
-        await akiaService.send(endpt, { status: "checked_in" }, "PATCH");
-        updates[HS.prop_status] = "CHECKED_IN";
-      } else if (reservation.status === "CHECKED_OUT") {
-        await akiaService.send(endpt, { status: "checked_out" }, "PATCH");
-        updates[HS.prop_status] = "CHECKED_OUT";
-      } else if (reservation.status === "CANCELLED") {
-        await akiaService.send(endpt, { status: "cancelled" }, "PATCH");
-        updates[HS.prop_status] = "CANCELLED";
-      }
-
-      // Map Details
-      if (reservation.arrival) {
-        await akiaService.send(
-          endpt,
-          {
-            arrival_date: reservation.arrival,
-            departure_date: reservation.departure,
-            room_type: reservation.room,
-          },
-          "PATCH",
-        );
-        updates[HS.prop_arrival] = reservation.arrival;
-        updates[HS.prop_room] = reservation.room;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await hubspotService.pushDeal(reservation, updates);
-      }
-    }
-
-    // 3. DIGITAL KEYS
-    else if (
-      eventType.includes("KEY") ||
-      hookData.key_status === "ISSUED" ||
-      hookData.key_status === "DELIVERED"
-    ) {
-      console.log(`Digital Key Issued for ${confirmationNumber}`);
-      await akiaService.send("/integrations/events", {
-        event_name: "digital_key_delivery",
-        guest: { reservation_id: confirmationNumber },
-      });
-    }
-  } catch (e) {
-    console.error("Webhook Error:", e.message);
+  // Check 'content' wrapper
+  if (data.content) {
+    if (data.content.confirmationId) return data.content.confirmationId;
+    if (data.content.confirmationNumber) return data.content.confirmationNumber;
   }
 
-  res.json({ received: true });
+  // Check 'payload' wrapper
+  if (data.payload) {
+    if (data.payload.confirmationId) return data.payload.confirmationId;
+    if (data.payload.confirmationNumber) return data.payload.confirmationNumber;
+  }
+
+  return null;
+};
+
+// --- 2. DATA MAPPER (For the API Response) ---
+// Transforms the "Fat" API response into your App's clean format
+const mapAgilysysResponse = (apiResponse) => {
+  const data = apiResponse;
+
+  // Handle Guest Array (Primary or First)
+  const guests = Array.isArray(data.guestInfo) ? data.guestInfo : [];
+  const primaryGuest =
+    guests.find((g) => g.primaryGuest === "true") || guests[0] || {};
+
+  // Handle Offers Array (Room Type)
+  const primaryOffer =
+    data.offers && data.offers.length > 0 ? data.offers[0] : {};
+
+  return {
+    confirmationNumber: data.confirmationId,
+    status: data.status,
+    depositSchedule: data.createDate,
+    villaType: primaryOffer.roomType,
+    villaNumber: primaryOffer.roomNum,
+    reservationID: data.reservationID,
+
+    guestInfo: {
+      firstName: primaryGuest.firstName || "Test",
+      lastName: primaryGuest.lastName || "Guest",
+      emailAddress: primaryGuest.emailAddress,
+      phoneNumber: primaryGuest.CellNumber || primaryGuest.PhoneNumber,
+      guestProfID: primaryGuest.guestProfID,
+      address: {
+        city: primaryGuest.cityName,
+        state: primaryGuest.stateProvinceCode,
+        country: primaryGuest.countryCode,
+      },
+    },
+
+    stayInfo: {
+      arrivalDate: data.stayInfo?.arrivalDate,
+      departureDate: data.stayInfo?.departureDate,
+      adults: data.stayInfo?.guestCounts?.adults || 1,
+      children: data.stayInfo?.guestCounts?.discChild || 0,
+    },
+  };
+};
+
+// --- 3. MAIN HANDLER ---
+exports.webhook = async (req, res) => {
+  try {
+    const event = req.body;
+
+    // Step A: Log Raw Payload (For Debugging)
+    console.log("RAW WEBHOOK:", JSON.stringify(event, null, 2));
+
+    // Step B: Hunt for the ID
+    const confirmationId = findConfirmationId(event);
+
+    if (!confirmationId) {
+      console.warn("SKIPPED: Webhook received but no Confirmation ID found.");
+      return res.status(200).send("Skipped - No ID");
+    }
+
+    console.log(
+      `Found ID: ${confirmationId}. Fetching full details from API...`,
+    );
+
+    // Step C: The "Fetch-Back" (Get the Perfect Data)
+    const fullReservationData =
+      await agilysysService.getReservation(confirmationId);
+
+    if (!fullReservationData) {
+      console.error(
+        `FETCH FAILED: Could not retrieve details for ${confirmationId}`,
+      );
+      // We return 200 to prevent infinite retries from Agilysys
+      return res.status(200).send("Fetch Failed");
+    }
+
+    const spaData = await agilysysService.getSpaAppointment(confirmationId);
+
+    const mergedData = {
+      ...fullReservationData,
+      spaItems: spaData,
+    };
+
+    // Step D: Map the Perfect Data
+    const cleanData = mapAgilysysResponse(mergedData);
+
+    // Step E: Determine Action based on Event Type OR Status
+    // Priority: Explicit Event Type -> Infer from Status
+    let eventType = event.eventType;
+    if (!eventType) {
+      if (cleanData.status === "Canceled") eventType = "RESERVATION_CANCELLED";
+      else eventType = "RESERVATION_UPDATED";
+    }
+
+    console.log(
+      `🚀 Processing ${eventType} for ${cleanData.confirmationNumber}`,
+    );
+
+    switch (eventType) {
+      case "RESERVATION_CREATED":
+      case "RESERVATION_UPDATED":
+      case "CHECK_IN":
+        await syncService.syncReservation(cleanData);
+        break;
+
+      case "RESERVATION_CANCELLED":
+        await syncService.handleCancellation(cleanData);
+        break;
+
+      default:
+        if (cleanData.status === "Canceled") {
+          await syncService.handleCancellation(cleanData);
+        } else {
+          await syncService.syncReservation(cleanData);
+        }
+        break;
+    }
+
+    res.status(200).json({ success: true, id: confirmationId });
+  } catch (err) {
+    console.error("WEBHOOK ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 };

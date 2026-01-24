@@ -11,6 +11,6 @@ router.get("/auth/callback", authController.callback);
 router.get("/setup-agilysys-webhook", authController.setupWebhook);
 
 // Main Webhook
-router.post("/webhook", webhookController.handleWebhook);
+router.post("/webhook", webhookController.webhook);
 
 module.exports = router;
