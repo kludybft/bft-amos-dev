@@ -5,34 +5,29 @@ const tokenService = require("../services/tokenService");
 const agilysysService = require("../services/agilysysService");
 
 exports.login = (req, res) => {
-  const scopes =
-    "customers:read,customers:write,properties:read,properties:write,users:read,users:write";
+  const scopes = "properties:read";
 
-  // Construct the Akia Auth URL
   const params = new URLSearchParams({
     client_id: config.AKIA.CLIENT_ID,
     scope: scopes,
     response_type: "code",
-    redirect_uri: config.AKIA.REDIRECT_URI, // Ensure this matches EXACTLY what is in Akia dashboard
+    redirect_uri: config.AKIA.REDIRECT_URI,
   });
 
   const authUrl = `https://sys.akia.com/oauth/authorize?${params.toString()}`;
 
-  // Send the user to Akia
   res.redirect(authUrl);
 };
 
 exports.callback = async (req, res) => {
   const { code } = req.query;
 
-  // Early exit if no code is present
   if (!code) {
     console.error("Callback reached without an authorization code.");
     return res.status(400).send("No authorization code provided.");
   }
 
   try {
-    // 1. Exchange Code for Token
     const tokenParams = new URLSearchParams();
     tokenParams.append("grant_type", "authorization_code");
     tokenParams.append("code", code);
@@ -47,47 +42,48 @@ exports.callback = async (req, res) => {
       tokenParams.toString(),
       {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: 5000, // 5-second timeout to prevent hanging
-      },
+        timeout: 5000,
+      }
     );
 
-    // 2. Extract and Validate Token
-    const { access_token, expires_in, scope } = resAuth.data;
+    const { access_token, expires_in } = resAuth.data;
 
     if (!access_token) {
       console.error(
         "Akia responded but no access_token was found in data:",
-        resAuth.data,
+        resAuth.data
       );
       throw new Error("Token exchange failed: No access token in response.");
     }
 
-    // Log token metadata for debugging (avoid logging the full secret token in production)
-    console.log(`Token acquired. Expires in: ${expires_in}s. Scopes: ${scope}`);
+    console.log(`Token acquired. Expires in: ${expires_in}s.`);
 
-    // 3. Fetch User Info (Skipping DB save for now)
-    console.log(`Fetching user info from: ${config.AKIA.BASE_URL}/v3/me`);
+    // console.log(
+    //   `Fetching user info from: ${config.AKIA.BASE_URL}/v3/properties`
+    // );
 
-    const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, {
-      headers: {
-        Authorization: `Bearer ${access_token.trim()}`,
-        Accept: "application/json",
-      },
-    });
+    // const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/properties`, {
+    //   headers: {
+    //     Authorization: `Bearer ${access_token.trim()}`,
+    //     Accept: "application/json",
+    //   },
+    // });
 
-    // 4. Final Success Response
-    res.send(`
-      <div style="font-family: sans-serif; padding: 20px;">
-        <h1 style="color: green;">Success!</h1>
-        <p>Token validated and User Profile retrieved.</p>
-        <pre style="background: #f4f4f4; padding: 15px;">${JSON.stringify(resMe.data, null, 2)}</pre>
-      </div>
-    `);
+    // res.send(`
+    //   <div style="font-family: sans-serif; padding: 20px;">
+    //     <h1 style="color: green;">Success!</h1>
+    //     <p>Token validated and User Profile retrieved.</p>
+    //     <pre style="background: #f4f4f4; padding: 15px;">${JSON.stringify(
+    //       resMe.data,
+    //       null,
+    //       2
+    //     )}</pre>
+    //   </div>
+    // `);
   } catch (e) {
     console.error("--- AUTHENTICATION FAILURE ---");
 
     if (e.response) {
-      // The server responded with a status code outside the 2xx range
       const status = e.response.status;
       const details = JSON.stringify(e.response.data);
 
@@ -101,13 +97,11 @@ exports.callback = async (req, res) => {
         details: e.response.data,
       });
     } else if (e.request) {
-      // The request was made but no response was received
       console.error(
-        "No response received from Akia. Network issue or incorrect BASE_URL.",
+        "No response received from Akia. Network issue or incorrect BASE_URL."
       );
       return res.status(504).send("Gateway Timeout: No response from Akia.");
     } else {
-      // Something happened in setting up the request
       console.error("Request Setup Error:", e.message);
       return res.status(500).send(`Application Error: ${e.message}`);
     }
@@ -140,13 +134,17 @@ exports.registerWebhook = async (req, res) => {
       headers,
     });
     res.send(
-      `<pre>Webhook Registered!\n${JSON.stringify(apiRes.data, null, 2)}</pre>`,
+      `<pre>Webhook Registered!\n${JSON.stringify(apiRes.data, null, 2)}</pre>`
     );
   } catch (e) {
     res
       .status(500)
       .send(
-        `<pre>Error:\n${JSON.stringify(e.response?.data || e.message, null, 2)}</pre>`,
+        `<pre>Error:\n${JSON.stringify(
+          e.response?.data || e.message,
+          null,
+          2
+        )}</pre>`
       );
   }
 };
