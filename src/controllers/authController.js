@@ -35,8 +35,6 @@ exports.callback = async (req, res) => {
     tokenParams.append("client_secret", config.AKIA.CLIENT_SECRET);
     tokenParams.append("redirect_uri", config.AKIA.REDIRECT_URI);
 
-    console.log("Exchanging code for token...");
-
     const resAuth = await axios.post(
       `${config.AKIA.BASE_URL}/oauth/token`,
       tokenParams.toString(),
@@ -59,7 +57,7 @@ exports.callback = async (req, res) => {
     // 2. Save tokens to your service
     // await tokenService.saveTokens(resAuth.data);
 
-    console.log(`Token acquired. Expires in: ${expires_in}s.`);
+    console.log(`Token acquired: ${access_token}. Expires in: ${expires_in}s.`);
 
     // console.log(
     //   `Fetching user info from: ${config.AKIA.BASE_URL}/v3/properties`
@@ -72,17 +70,13 @@ exports.callback = async (req, res) => {
     //   },
     // });
 
-    // res.send(`
-    //   <div style="font-family: sans-serif; padding: 20px;">
-    //     <h1 style="color: green;">Success!</h1>
-    //     <p>Token validated and User Profile retrieved.</p>
-    //     <pre style="background: #f4f4f4; padding: 15px;">${JSON.stringify(
-    //       resMe.data,
-    //       null,
-    //       2
-    //     )}</pre>
-    //   </div>
-    // `);
+    res.send(`
+      <div style="font-family: sans-serif; padding: 20px;">
+        <h1 style="color: green;">Success!</h1>
+        <p>Token validated and User Profile retrieved.</p>
+        <pre style="background: #f4f4f4; padding: 15px;"></pre>
+      </div>
+    `);
   } catch (e) {
     console.error("--- AUTHENTICATION FAILURE ---");
 
