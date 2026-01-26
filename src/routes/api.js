@@ -13,6 +13,6 @@ router.get("/register-webhook", authController.registerWebhook);
 // Main Webhook
 router.post("/webhook", webhookController.webhook);
 
-router.get("/me", authController.me);
+router.get("/properties", authController.properties);
 
 module.exports = router;

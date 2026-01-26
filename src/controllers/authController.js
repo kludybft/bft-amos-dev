@@ -89,7 +89,7 @@ exports.callback = async (req, res) => {
   }
 };
 
-exports.me = async (req, res) => {
+exports.properties = async (req, res) => {
   const access_token = await tokenService.getValidToken();
 
   console.log("Using access token:", access_token);
