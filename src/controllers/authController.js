@@ -56,6 +56,9 @@ exports.callback = async (req, res) => {
       throw new Error("Token exchange failed: No access token in response.");
     }
 
+    // 2. Save tokens to your service
+    // await tokenService.saveTokens(resAuth.data);
+
     console.log(`Token acquired. Expires in: ${expires_in}s.`);
 
     // console.log(
