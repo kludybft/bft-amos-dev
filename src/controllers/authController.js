@@ -13,16 +13,10 @@ exports.login = (req, res) => {
 
 exports.callback = async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).send("No code provided in query params.");
-
-  // We use this variable to track exactly where the code crashes
-  let currentStep = "INIT";
+  if (!code) return res.status(400).send("No code.");
 
   try {
-    // --- STEP 1: Exchange Code for Token ---
-    currentStep = "EXCHANGE_TOKEN";
-    console.log(`[${currentStep}] Requesting token from Akia...`);
-
+    // 1. Get Token
     const resAuth = await axios.post(
       `${config.AKIA.BASE_URL}/oauth/token`,
       querystring.stringify({
@@ -35,74 +29,42 @@ exports.callback = async (req, res) => {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
     );
 
-    const { access_token } = resAuth.data;
+    const { access_token, scope } = resAuth.data; // Akia usually returns the granted scope too
 
-    // Safety check: Did we actually get a token?
-    if (!access_token) {
-      throw new Error(
-        "Token response received but 'access_token' property is missing.",
-      );
-    }
+    // DEBUG: Print exactly what we got
+    console.log("1. Token Response:", JSON.stringify(resAuth.data, null, 2));
 
-    console.log(`[${currentStep}] Token received successfully.`);
+    if (!access_token) throw new Error("No access_token in response");
 
-    // --- STEP 2: Save Token ---
-    currentStep = "SAVE_TOKEN";
+    // 2. Save Token
     await tokenService.saveTokens(resAuth.data);
 
-    // --- STEP 3: Fetch User Profile ---
-    currentStep = "FETCH_USER";
-    console.log(`[${currentStep}] Fetching /v3/me with token...`);
+    // 3. Call /v3/me
+    console.log(`2. Attempting GET ${config.AKIA.BASE_URL}/v3/me`);
+    console.log(`3. Using Scope: ${scope}`);
 
-    const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    // Explicitly construct headers to ensure no hidden types
+    const headers = {
+      Authorization: `Bearer ${String(access_token).trim()}`, // Force string and trim whitespace
+      "Content-Type": "application/json",
+    };
 
-    console.log(`[${currentStep}] User data retrieved.`);
+    const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, { headers });
 
-    // Success Response
     res.send(
-      `<h1>Login Success!</h1>
-       <h3>User Data:</h3>
-       <pre>${JSON.stringify(resMe.data, null, 2)}</pre>`,
+      `<h1>Success</h1><pre>${JSON.stringify(resMe.data, null, 2)}</pre>`,
     );
-  } catch (error) {
-    // --- Detailed Error Handling ---
-    console.error(`FAILED AT STEP: [${currentStep}]`);
-
-    let errorMessage = `Process failed at step: <b>${currentStep}</b><br><br>`;
-    let errorDetails = {};
-
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.error("Status:", error.response.status);
-      console.error("Data:", error.response.data);
-      console.error("Headers:", error.response.headers);
-
-      errorDetails = {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data, // This usually contains the specific API error message
-      };
-
-      errorMessage += `<b>HTTP Error:</b> ${error.response.status} ${error.response.statusText}<br>`;
-      errorMessage += `<b>API Response:</b> <pre>${JSON.stringify(error.response.data, null, 2)}</pre>`;
-    } else if (error.request) {
-      // The request was made but no response was received
-      console.error("No response received:", error.request);
-      errorMessage += "<b>Network Error:</b> No response received from Akia.";
+  } catch (e) {
+    console.error("--- FAILURE LOG ---");
+    if (e.response) {
+      // The server responded with a 401
+      console.error("Status:", e.response.status);
+      console.error("Server Message:", JSON.stringify(e.response.data));
+      console.error("Headers Sent:", JSON.stringify(e.config.headers)); // Check this log specifically!
     } else {
-      // Something happened in setting up the request that triggered an Error
-      console.error("Error Message:", error.message);
-      errorMessage += `<b>Internal Error:</b> ${error.message}`;
+      console.error("Error:", e.message);
     }
-
-    // Send the detailed error to the browser so you can read it easily
-    res.status(500).send(errorMessage);
+    res.status(500).send(`Error: ${e.message}`);
   }
 };
 
