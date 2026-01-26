@@ -55,20 +55,9 @@ exports.callback = async (req, res) => {
     }
 
     // 2. Save tokens to your service
-    // await tokenService.saveTokens(resAuth.data);
+    await tokenService.saveTokens(resAuth.data);
 
     console.log(`Token acquired: ${access_token}. Expires in: ${expires_in}s.`);
-
-    // console.log(
-    //   `Fetching user info from: ${config.AKIA.BASE_URL}/v3/properties`
-    // );
-
-    // const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/properties`, {
-    //   headers: {
-    //     Authorization: `Bearer ${access_token.trim()}`,
-    //     Accept: "application/json",
-    //   },
-    // });
 
     res.send(`
       <div style="font-family: sans-serif; padding: 20px;">
@@ -102,6 +91,52 @@ exports.callback = async (req, res) => {
       console.error("Request Setup Error:", e.message);
       return res.status(500).send(`Application Error: ${e.message}`);
     }
+  }
+};
+
+exports.me = async (req, res) => {
+  const access_token = await tokenService.getValidToken();
+
+  console.log("Using access token:", access_token);
+
+  try {
+    const response = await axios.get(`https://api.akia.com/v3/properties`, {
+      headers: {
+        Authorization: `Bearer ${access_token}`, // Ensure access_token is defined in this scope
+      },
+    });
+
+    // Return the successful data to the client
+    return res.status(200).json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    // 1. Log the error for internal debugging
+    console.error("Error fetching properties:", error.message);
+
+    // 2. Handle Axios-specific errors (response from the API)
+    if (error.response) {
+      return res.status(error.response.status).json({
+        success: false,
+        message: "API Error",
+        details: error.response.data,
+      });
+    }
+
+    // 3. Handle Network errors (no response received)
+    if (error.request) {
+      return res.status(503).json({
+        success: false,
+        message: "Service unavailable. No response from API.",
+      });
+    }
+
+    // 4. Handle unexpected errors (code/syntax issues)
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
   }
 };
 
