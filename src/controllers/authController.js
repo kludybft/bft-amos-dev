@@ -7,67 +7,71 @@ const agilysysService = require("../services/agilysysService");
 exports.login = (req, res) => {
   const scopes =
     "customers:read,customers:write,properties:read,properties:write";
-  const url = `https://sys.akia.com/oauth/authorize?client_id=${config.AKIA.CLIENT_ID}&scope=${scopes}&response_type=code&redirect_uri=${encodeURIComponent(config.AKIA.REDIRECT_URI)}`;
-  res.redirect(url);
+
+  // Construct the Akia Auth URL
+  const params = new URLSearchParams({
+    client_id: config.AKIA.CLIENT_ID,
+    scope: scopes,
+    response_type: "code",
+    redirect_uri: config.AKIA.REDIRECT_URI, // Ensure this matches EXACTLY what is in Akia dashboard
+  });
+
+  const authUrl = `https://sys.akia.com/oauth/authorize?${params.toString()}`;
+
+  // Send the user to Akia
+  res.redirect(authUrl);
 };
 
 exports.callback = async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).send("No code.");
+  if (!code) return res.status(400).send("No authorization code provided.");
 
   try {
-    // 1. Get Token
+    // 1. Exchange Code for Token
+    // Use URLSearchParams for x-www-form-urlencoded data
+    const tokenParams = new URLSearchParams();
+    tokenParams.append("grant_type", "authorization_code");
+    tokenParams.append("code", code);
+    tokenParams.append("client_id", config.AKIA.CLIENT_ID);
+    tokenParams.append("client_secret", config.AKIA.CLIENT_SECRET);
+    tokenParams.append("redirect_uri", config.AKIA.REDIRECT_URI);
+
     const resAuth = await axios.post(
       `${config.AKIA.BASE_URL}/oauth/token`,
-      querystring.stringify({
-        code,
-        grant_type: "authorization_code",
-        client_id: config.AKIA.CLIENT_ID,
-        client_secret: config.AKIA.CLIENT_SECRET,
-        redirect_uri: config.AKIA.REDIRECT_URI,
-      }),
+      tokenParams.toString(),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
     );
 
-    const { access_token, scope } = resAuth.data; // Akia usually returns the granted scope too
+    const { access_token } = resAuth.data;
 
-    // DEBUG: Print exactly what we got
-    console.log("1. Token Response:", JSON.stringify(resAuth.data, null, 2));
-
-    if (!access_token) throw new Error("No access_token in response");
+    if (!access_token) {
+      throw new Error("Token exchange failed: No access token received.");
+    }
 
     // 2. Save Token
     await tokenService.saveTokens(resAuth.data);
 
-    // 3. Call /v3/me
-    console.log(`2. Attempting GET ${config.AKIA.BASE_URL}/v3/me`);
-    console.log(`3. Using Scope: ${scope}`);
-    console.log(`3. Using auth token: ${access_token}`);
-
-    // Explicitly construct headers to ensure no hidden types
-    const headers = {
-      Authorization: `Bearer ${String(access_token).trim()}`, // Force string and trim whitespace
-      "Content-Type": "application/json",
-    };
-
-    console.log("headers", headers);
-
-    const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, { headers });
+    // 3. Fetch User Info
+    // Note: Ensure /v3/me is the correct endpoint for Akia
+    const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        "Content-Type": "application/json",
+      },
+    });
 
     res.send(
       `<h1>Success</h1><pre>${JSON.stringify(resMe.data, null, 2)}</pre>`,
     );
   } catch (e) {
-    console.error("--- FAILURE LOG ---");
-    if (e.response) {
-      // The server responded with a 401
-      console.error("Status:", e.response.status);
-      console.error("Server Message:", JSON.stringify(e.response.data));
-      console.error("Headers Sent:", JSON.stringify(e.config.headers)); // Check this log specifically!
-    } else {
-      console.error("Error:", e.message);
-    }
-    res.status(500).send(`Error: ${e.message}`);
+    console.error("--- OAUTH ERROR ---");
+    const errorData = e.response ? e.response.data : e.message;
+    console.error(errorData);
+
+    res.status(500).json({
+      message: "Authentication failed",
+      details: errorData,
+    });
   }
 };
 
