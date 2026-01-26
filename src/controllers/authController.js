@@ -13,10 +13,16 @@ exports.login = (req, res) => {
 
 exports.callback = async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).send("No code.");
+  if (!code) return res.status(400).send("No code provided in query params.");
+
+  // We use this variable to track exactly where the code crashes
+  let currentStep = "INIT";
 
   try {
-    // 1. Exchange Auth Code for Access Token
+    // --- STEP 1: Exchange Code for Token ---
+    currentStep = "EXCHANGE_TOKEN";
+    console.log(`[${currentStep}] Requesting token from Akia...`);
+
     const resAuth = await axios.post(
       `${config.AKIA.BASE_URL}/oauth/token`,
       querystring.stringify({
@@ -29,14 +35,25 @@ exports.callback = async (req, res) => {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
     );
 
-    // Extract the access token immediately from the response
     const { access_token } = resAuth.data;
 
-    // 2. Save tokens to your service
+    // Safety check: Did we actually get a token?
+    if (!access_token) {
+      throw new Error(
+        "Token response received but 'access_token' property is missing.",
+      );
+    }
+
+    console.log(`[${currentStep}] Token received successfully.`);
+
+    // --- STEP 2: Save Token ---
+    currentStep = "SAVE_TOKEN";
     await tokenService.saveTokens(resAuth.data);
 
-    // 3. Run GET /v3/me using the fresh access token
-    // This ensures we are using the valid token we just received
+    // --- STEP 3: Fetch User Profile ---
+    currentStep = "FETCH_USER";
+    console.log(`[${currentStep}] Fetching /v3/me with token...`);
+
     const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, {
       headers: {
         Authorization: `Bearer ${access_token}`,
@@ -44,19 +61,48 @@ exports.callback = async (req, res) => {
       },
     });
 
-    // Optional: Log the user data to console to verify it worked
-    console.log("Akia User Info:", resMe.data);
+    console.log(`[${currentStep}] User data retrieved.`);
 
-    // 4. Send success response
-    // (I added the user data to the response so you can see it on the screen)
+    // Success Response
     res.send(
-      `<h1>Login Success!</h1><pre>${JSON.stringify(resMe.data, null, 2)}</pre>`,
+      `<h1>Login Success!</h1>
+       <h3>User Data:</h3>
+       <pre>${JSON.stringify(resMe.data, null, 2)}</pre>`,
     );
-  } catch (e) {
-    // Helpful for debugging: check if the error came from the second call
-    const errorMsg = e.response ? JSON.stringify(e.response.data) : e.message;
-    console.error("Login Error:", errorMsg);
-    res.status(500).send(`Error: ${e.message}`);
+  } catch (error) {
+    // --- Detailed Error Handling ---
+    console.error(`FAILED AT STEP: [${currentStep}]`);
+
+    let errorMessage = `Process failed at step: <b>${currentStep}</b><br><br>`;
+    let errorDetails = {};
+
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error("Status:", error.response.status);
+      console.error("Data:", error.response.data);
+      console.error("Headers:", error.response.headers);
+
+      errorDetails = {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data, // This usually contains the specific API error message
+      };
+
+      errorMessage += `<b>HTTP Error:</b> ${error.response.status} ${error.response.statusText}<br>`;
+      errorMessage += `<b>API Response:</b> <pre>${JSON.stringify(error.response.data, null, 2)}</pre>`;
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error("No response received:", error.request);
+      errorMessage += "<b>Network Error:</b> No response received from Akia.";
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error("Error Message:", error.message);
+      errorMessage += `<b>Internal Error:</b> ${error.message}`;
+    }
+
+    // Send the detailed error to the browser so you can read it easily
+    res.status(500).send(errorMessage);
   }
 };
 
