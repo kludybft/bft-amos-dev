@@ -42,12 +42,15 @@ exports.callback = async (req, res) => {
     // 3. Call /v3/me
     console.log(`2. Attempting GET ${config.AKIA.BASE_URL}/v3/me`);
     console.log(`3. Using Scope: ${scope}`);
+    console.log(`3. Using auth token: ${access_token}`);
 
     // Explicitly construct headers to ensure no hidden types
     const headers = {
       Authorization: `Bearer ${String(access_token).trim()}`, // Force string and trim whitespace
       "Content-Type": "application/json",
     };
+
+    console.log("headers", headers);
 
     const resMe = await axios.get(`${config.AKIA.BASE_URL}/v3/me`, { headers });
 
