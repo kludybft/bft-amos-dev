@@ -50,8 +50,6 @@ exports.syncReservation = async (dealData) => {
       dealItemName: "Spa Appointment",
       itemType: "spa",
       spaService: spaItem.activityDetail.activityName,
-      //   startDateTime: spaItem.activityDetail.startDateTime,
-      //   endDateTime: spaItem.activityDetail.endDateTime,
       price: spaItem.price,
       gratuityAmount: spaItem.gratuityAmount,
       taxAmount: spaItem.taxAmount,
@@ -83,8 +81,6 @@ exports.syncReservation = async (dealData) => {
           departure_date: dealData.stayInfo.departureDate,
           extern_id: dealData.confirmationNumber,
           room_type: dealData.villaType,
-          confirmation_number: dealData.confirmationNumber,
-          status: "confirmed",
         });
         akiaLink = `https://app.akia.com/conversation/${akiaGuest.id}`;
       }

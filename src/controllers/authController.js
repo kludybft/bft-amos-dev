@@ -1,5 +1,4 @@
 const axios = require("axios");
-const querystring = require("querystring");
 const config = require("../config/env");
 const tokenService = require("../services/tokenService");
 const agilysysService = require("../services/agilysysService");
@@ -40,8 +39,7 @@ exports.callback = async (req, res) => {
       tokenParams.toString(),
       {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: 5000,
-      }
+      },
     );
 
     const { access_token, expires_in } = resAuth.data;
@@ -49,23 +47,20 @@ exports.callback = async (req, res) => {
     if (!access_token) {
       console.error(
         "Akia responded but no access_token was found in data:",
-        resAuth.data
+        resAuth.data,
       );
       throw new Error("Token exchange failed: No access token in response.");
     }
 
-    // 2. Save tokens to your service
+    // Save tokens to your service -> db
     await tokenService.saveTokens(resAuth.data);
 
     console.log(`Token acquired: ${access_token}. Expires in: ${expires_in}s.`);
 
-    res.send(`
-      <div style="font-family: sans-serif; padding: 20px;">
-        <h1 style="color: green;">Success!</h1>
-        <p>Token validated and User Profile retrieved.</p>
-        <pre style="background: #f4f4f4; padding: 15px;"></pre>
-      </div>
-    `);
+    return res.status(200).json({
+      success: true,
+      message: "Token validated and User Profile retrieved.",
+    });
   } catch (e) {
     console.error("--- AUTHENTICATION FAILURE ---");
 
@@ -84,7 +79,7 @@ exports.callback = async (req, res) => {
       });
     } else if (e.request) {
       console.error(
-        "No response received from Akia. Network issue or incorrect BASE_URL."
+        "No response received from Akia. Network issue or incorrect BASE_URL.",
       );
       return res.status(504).send("Gateway Timeout: No response from Akia.");
     } else {
@@ -102,7 +97,7 @@ exports.me = async (req, res) => {
   try {
     const response = await axios.get(`https://api.akia.com/v3/properties`, {
       headers: {
-        Authorization: `Bearer ${access_token}`, // Ensure access_token is defined in this scope
+        Authorization: `Bearer ${access_token}`,
       },
     });
 
@@ -166,7 +161,7 @@ exports.registerWebhook = async (req, res) => {
       headers,
     });
     res.send(
-      `<pre>Webhook Registered!\n${JSON.stringify(apiRes.data, null, 2)}</pre>`
+      `<pre>Webhook Registered!\n${JSON.stringify(apiRes.data, null, 2)}</pre>`,
     );
   } catch (e) {
     res
@@ -175,8 +170,8 @@ exports.registerWebhook = async (req, res) => {
         `<pre>Error:\n${JSON.stringify(
           e.response?.data || e.message,
           null,
-          2
-        )}</pre>`
+          2,
+        )}</pre>`,
       );
   }
 };

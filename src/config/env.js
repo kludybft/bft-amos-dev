@@ -19,6 +19,7 @@ module.exports = {
     PIPELINE_CONFIG: {
       default_pipeline: "default",
       initial_stage: "appointmentscheduled",
+      prop_confirmation_number: "confirmation_number",
       prop_akia_url: "akia_url",
     },
   },

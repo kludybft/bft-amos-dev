@@ -180,8 +180,8 @@ async function createUnifiedLineItem(dealId, item) {
     sales_rep_ag_id: item.salesRepAgId || null,
 
     // Spa Specific Fields
-    start_date_time: item.startDateTime || null,
-    end_date_time: item.endDateTime || null,
+    // start_date_time: item.startDateTime || null,
+    // end_date_time: item.endDateTime || null,
     spa_service: item.spaService || null,
     gratuity_amount: item.gratuityAmount || null,
     therapist_id: item.therapistId || null,
