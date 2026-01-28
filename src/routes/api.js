@@ -8,7 +8,7 @@ router.get("/auth/login", authController.login);
 router.get("/auth/callback", authController.callback);
 
 // Setup Route
-router.get("/register-webhook", authController.registerWebhook);
+// router.get("/register-webhook", authController.registerWebhook);
 
 // Main Webhook
 router.post("/webhook", webhookController.webhook);

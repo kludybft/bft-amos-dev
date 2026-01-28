@@ -90,14 +90,14 @@ exports.callback = async (req, res) => {
 };
 
 exports.properties = async (req, res) => {
-  const access_token = await tokenService.getValidToken();
+  const accessToken = await tokenService.getValidToken();
 
-  console.log("Using access token:", access_token);
+  console.log("Using access token:", accessToken);
 
   try {
-    const response = await axios.get(`https://api.akia.com/v3/properties`, {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
+    const response = await axios.get(`${config.AKIA.BASE_URL}/v3/properties`, {
+      params: {
+        access_token: accessToken,
       },
     });
 
@@ -135,43 +135,43 @@ exports.properties = async (req, res) => {
   }
 };
 
-exports.registerWebhook = async (req, res) => {
-  const MY_URL =
-    "https://3d1ddc13-060d-4411-992a-9ad6545cdf18-dev.e1-us-east-azure.choreoapis.dev/amos-interfacing/bft-amos-dev/v1.0/webhook";
+// exports.registerWebhook = async (req, res) => {
+//   const MY_URL =
+//     "https://3d1ddc13-060d-4411-992a-9ad6545cdf18-dev.e1-us-east-azure.choreoapis.dev/amos-interfacing/bft-amos-dev/v1.0/webhook";
 
-  try {
-    const { token, session } = await agilysysService.getBookingAuth();
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-    if (session) headers["SessionId"] = session;
+//   try {
+//     const { token, session } = await agilysysService.getBookingAuth();
+//     const headers = {
+//       Authorization: `Bearer ${token}`,
+//       "Content-Type": "application/json",
+//     };
+//     if (session) headers["SessionId"] = session;
 
-    const payload = {
-      endpointUrl: MY_URL,
-      eventTypes: [
-        "RESERVATION_CREATED",
-        "RESERVATION_UPDATED",
-        "RESERVATION_CANCELLED",
-        "CHECK_IN",
-        "CHECK_OUT",
-      ],
-    };
-    const apiRes = await axios.post(config.AGILYSYS.SUB_URL, payload, {
-      headers,
-    });
-    res.send(
-      `<pre>Webhook Registered!\n${JSON.stringify(apiRes.data, null, 2)}</pre>`,
-    );
-  } catch (e) {
-    res
-      .status(500)
-      .send(
-        `<pre>Error:\n${JSON.stringify(
-          e.response?.data || e.message,
-          null,
-          2,
-        )}</pre>`,
-      );
-  }
-};
+//     const payload = {
+//       endpointUrl: MY_URL,
+//       eventTypes: [
+//         "RESERVATION_CREATED",
+//         "RESERVATION_UPDATED",
+//         "RESERVATION_CANCELLED",
+//         "CHECK_IN",
+//         "CHECK_OUT",
+//       ],
+//     };
+//     const apiRes = await axios.post(config.AGILYSYS.SUB_URL, payload, {
+//       headers,
+//     });
+//     res.send(
+//       `<pre>Webhook Registered!\n${JSON.stringify(apiRes.data, null, 2)}</pre>`,
+//     );
+//   } catch (e) {
+//     res
+//       .status(500)
+//       .send(
+//         `<pre>Error:\n${JSON.stringify(
+//           e.response?.data || e.message,
+//           null,
+//           2,
+//         )}</pre>`,
+//       );
+//   }
+// };

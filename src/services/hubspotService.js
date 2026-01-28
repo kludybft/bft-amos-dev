@@ -176,7 +176,7 @@ async function createUnifiedLineItem(dealId, item) {
     item_type: item.itemType || null,
     tax_amount: item.taxAmount || null,
     deposit_policy: item.depositPolicy || null,
-    sales_rep_hs_id: item.salesRepHsId || null,
+    // sales_rep_hs_id: item.salesRepHsId || null,
     sales_rep_ag_id: item.salesRepAgId || null,
 
     // Spa Specific Fields

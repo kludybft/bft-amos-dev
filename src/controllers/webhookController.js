@@ -28,41 +28,42 @@ const findConfirmationId = (data) => {
 const mapAgilysysResponse = (apiResponse) => {
   const data = apiResponse;
 
-  // Guest Array
-  const guests = Array.isArray(data.guestInfo) ? data.guestInfo : [];
-  const primaryGuest =
-    guests.find((g) => g.primaryGuest === "true") || guests[0] || {};
+  // Guest Object
+  const guest = data.guestInfo || {};
 
-  // Offers Array
-  const primaryOffer =
-    data.offers && data.offers.length > 0 ? data.offers[0] : {};
+  // Offers Object
+  const offers = data.offers || {};
+
+  // Stay Object
+  const stay = data.stayInfo || {};
 
   return {
     confirmationNumber: data.confirmationId,
     reservationID: data.reservationID,
     status: data.status,
     depositSchedule: data.createDate,
-    villaType: primaryOffer.roomType,
-    villaNumber: primaryOffer.roomNum,
+    villaType: offers.roomType,
+    villaNumber: offers.roomNum,
 
     guestInfo: {
-      firstName: primaryGuest.firstName || "Test",
-      lastName: primaryGuest.lastName || "Guest",
-      emailAddress: primaryGuest.emailAddress,
-      phoneNumber: primaryGuest.CellNumber || primaryGuest.PhoneNumber,
-      guestProfID: primaryGuest.guestProfID,
-      address: {
-        city: primaryGuest.cityName,
-        state: primaryGuest.stateProvinceCode,
-        country: primaryGuest.countryCode,
-      },
+      firstName: guest.firstName || "Test",
+      lastName: guest.lastName || "Guest",
+      emailAddress: guest.emailAddress,
+      phoneNumber: guest.CellNumber || guest.PhoneNumber,
+      guestProfID: guest.guestProfID,
+      addressLine1: guest.addressLine1,
+      addressLine2: guest.addressLine2,
+      cityName: guest.cityName,
+      stateProvinceCode: guest.stateProvinceCode,
+      postalCode: guest.postalCode,
+      countryCode: guest.countryCode,
     },
 
     stayInfo: {
-      arrivalDate: data.stayInfo?.arrivalDate,
-      departureDate: data.stayInfo?.departureDate,
-      adults: data.stayInfo?.guestCounts?.adults || 1,
-      children: data.stayInfo?.guestCounts?.discChild || 0,
+      arrivalDate: stay?.arrivalDate,
+      departureDate: stay?.departureDate,
+      adults: stay?.guestCounts?.adults || 1,
+      children: stay?.guestCounts?.children || 0,
     },
   };
 };
@@ -94,11 +95,12 @@ exports.webhook = async (req, res) => {
       return res.status(200).send("Fetch Failed");
     }
 
-    const spaData = await agilysysService.getSpaAppointment(confirmationId);
+    // Get spa items
+    // const spaData = await agilysysService.getSpaAppointment(confirmationId);
 
     const mergedData = {
       ...fullReservationData,
-      spaItems: spaData,
+      // spaItems: spaData,
     };
 
     // Map the clean data

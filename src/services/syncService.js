@@ -17,6 +17,11 @@ exports.syncReservation = async (dealData) => {
 
     const allLineItems = [];
 
+    const salesReps = {
+      // salesRepHsId: "12345678",
+      salesRepAgId: dealData.salesRepAgId,
+    };
+
     // Loop for Nightly Items
     for (let i = 0; i < numberOfNights; i++) {
       const currentNightDate = new Date(arrival);
@@ -24,38 +29,35 @@ exports.syncReservation = async (dealData) => {
       const formattedDate = currentNightDate.toISOString().split("T")[0];
 
       allLineItems.push({
+        ...salesReps,
         confirmationNumber: dealData.confirmationNumber,
         dealItemName: `Night ${i + 1} - ${formattedDate}`,
         itemType: "night",
         dateOfNight: formattedDate,
         villaType: dealData.villaType,
-        salesRepHsId: "12345678",
-        salesRepAgId: "AGUSER-9876",
       });
     }
 
-    const addOns = (dealData.addOnItems || []).map((addOnItem) => ({
-      confirmationNumber: addOnItem.confirmationNumber,
+    const addOns = (dealData?.addOnItems || []).map((item) => ({
+      ...salesReps,
+      confirmationNumber: item.confirmationNumber,
       dealItemName: "Add-on",
       itemType: "addon",
-      price: addOnItem.price,
-      taxAmount: addOnItem.taxAmount,
-      postType: addOnItem.postType,
-      salesRepHsId: "12345678",
-      salesRepAgId: "AGUSER-9876",
+      price: item.price,
+      taxAmount: item.taxAmount,
+      postType: item.postType,
     }));
 
-    const spaItems = (dealData.spaItems || []).map((spaItem) => ({
-      confirmationNumber: spaItem.activityDetail.confirmationNumber,
+    const spaItems = (dealData?.spaItems || []).map((item) => ({
+      ...salesReps,
+      confirmationNumber: item?.activityDetail?.confirmationNumber,
       dealItemName: "Spa Appointment",
       itemType: "spa",
-      spaService: spaItem.activityDetail.activityName,
-      price: spaItem.price,
-      gratuityAmount: spaItem.gratuityAmount,
-      taxAmount: spaItem.taxAmount,
-      therapistId: spaItem.therapistId,
-      salesRepHsId: "12345678",
-      salesRepAgId: "AGUSER-9876",
+      spaService: item?.activityDetail?.activityName,
+      price: item.price,
+      gratuityAmount: item.gratuityAmount,
+      taxAmount: item.taxAmount,
+      therapistId: item.therapistId,
     }));
 
     allLineItems.push(...addOns, ...spaItems);
@@ -70,7 +72,7 @@ exports.syncReservation = async (dealData) => {
         email: dealData.guestInfo.emailAddress,
         phone_number: dealData.guestInfo.phoneNumber,
         extern_id: dealData.guestInfo.guestProfID,
-        property_id: 190,
+        property_id: 1387,
       });
 
       // 2. Create/Update Reservation
@@ -82,7 +84,7 @@ exports.syncReservation = async (dealData) => {
           extern_id: dealData.confirmationNumber,
           room_type: dealData.villaType,
         });
-        akiaLink = `https://app.akia.com/conversation/${akiaGuest.id}`;
+        akiaLink = `https://sys.akia.com/inbox/${akiaGuest.id}`;
       }
     } catch (akiaErr) {
       console.error("Akia Sync Warning:", akiaErr.message);
@@ -96,8 +98,10 @@ exports.syncReservation = async (dealData) => {
       villaType: dealData.villaType,
       villaNumber: dealData.villaNumber,
       lastName: dealData.guestInfo.lastName,
-      items: allLineItems,
       dealStage: "closedwon",
+
+      // line items ex. Spas, Add-ons
+      items: allLineItems,
     };
 
     const extraUpdates = {

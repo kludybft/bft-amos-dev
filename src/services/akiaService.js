@@ -4,14 +4,13 @@ const tokenService = require("./tokenService");
 
 exports.send = async (endpoint, payload, method = "POST") => {
   try {
-    const token = await tokenService.getValidToken();
+    const accessToken = await tokenService.getValidToken();
     const res = await axios({
       method,
       url: `${config.AKIA.BASE_URL}/${endpoint}`,
       data: payload,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+      params: {
+        access_token: accessToken,
       },
     });
     return res.data;
