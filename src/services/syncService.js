@@ -65,7 +65,7 @@ exports.syncReservation = async (dealData) => {
     // B. Akia sync
     let akiaLink = null;
     try {
-      // Create customer
+      // 1. Create/Update Customer
       const akiaGuest = await akiaService.send("/v3/customers", {
         first_name: dealData.guestInfo.firstName,
         last_name: dealData.guestInfo.lastName,
