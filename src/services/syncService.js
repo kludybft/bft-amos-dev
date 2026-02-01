@@ -7,18 +7,11 @@ const HS = config.HUBSPOT.PIPELINE_CONFIG;
 // 1. Sync reservation
 exports.syncReservation = async (dealData) => {
   try {
-    // A. Generate line items
-    const arrival = new Date(dealData.stayInfo.arrivalDate);
-    const departure = new Date(dealData.stayInfo.departureDate);
-
-    // Calculate number of nights
-    const diffTime = Math.abs(departure - arrival);
-    const numberOfNights = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+    const numberOfNights = Number(dealData.offers.nights) || 1;
 
     const allLineItems = [];
 
     const salesReps = {
-      // salesRepHsId: "12345678",
       salesRepAgId: dealData.salesRepAgId,
     };
 
@@ -34,7 +27,7 @@ exports.syncReservation = async (dealData) => {
         dealItemName: `Night ${i + 1} - ${formattedDate}`,
         itemType: "night",
         dateOfNight: formattedDate,
-        villaType: dealData.villaType,
+        villaType: dealData.offers.villaType,
       });
     }
 
@@ -82,7 +75,7 @@ exports.syncReservation = async (dealData) => {
           arrival_date: dealData.stayInfo.arrivalDate,
           departure_date: dealData.stayInfo.departureDate,
           extern_id: dealData.confirmationNumber,
-          room_type: dealData.villaType,
+          room_type: dealData.offers.villaType,
         });
         akiaLink = `https://sys.akia.com/inbox/${akiaGuest.id}`;
       }
@@ -95,8 +88,8 @@ exports.syncReservation = async (dealData) => {
       confirmationNumber: dealData.confirmationNumber,
       arrivalDate: dealData.stayInfo.arrivalDate,
       departureDate: dealData.stayInfo.departureDate,
-      villaType: dealData.villaType,
-      villaNumber: dealData.villaNumber,
+      villaType: dealData.offers.villaType,
+      villaNumber: dealData.offers.villaNumber,
       lastName: dealData.guestInfo.lastName,
       dealStage: "closedwon",
 
@@ -109,8 +102,6 @@ exports.syncReservation = async (dealData) => {
     };
 
     await hubspotService.pushDeal(dealPayload, extraUpdates);
-
-    console.log(`Sync Complete for Ref: ${dealData.confirmationNumber}`);
   } catch (err) {
     console.error(
       `Sync Service Failed for ${dealData.confirmationNumber}:`,
