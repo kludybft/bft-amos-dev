@@ -1,66 +1,41 @@
 const syncService = require("../services/syncService");
 const agilysysService = require("../services/agilysysService");
 
-// 1. ID FINDER
-// Finds the ID no matter where Agilysys hides it in the webhook
-const findConfirmationId = (data) => {
-  // Check Root
-  if (data.confirmationId) return data.confirmationId;
-  if (data.confirmationNumber) return data.confirmationNumber;
-
-  // Check content wrapper
-  if (data.content) {
-    if (data.content.confirmationId) return data.content.confirmationId;
-    if (data.content.confirmationNumber) return data.content.confirmationNumber;
-  }
-
-  // Check payload wrapper
-  if (data.payload) {
-    if (data.payload.confirmationId) return data.payload.confirmationId;
-    if (data.payload.confirmationNumber) return data.payload.confirmationNumber;
-  }
-
-  return null;
-};
-
-// 2. DATA MAPPER
-// Transforms the API response to match format
 const mapAgilysysResponse = (apiResponse) => {
   const data = apiResponse;
 
-  // Guest Object
   const guest = data.guestInfo || {};
 
-  // Offers Object
   const offers = data.offers || {};
 
-  // Stay Object
   const stay = data.stayInfo || {};
 
   return {
-    confirmationNumber: data.confirmationId || data.confirmationNumber,
-    reservationID: data.reservationID,
+    confirmationNumber: data.confirmationNumber,
     status: data.status,
+    origin: data.origin,
+    segment: data.segment,
     depositSchedule: data.depositSchedule,
     cxlPolicy: data.cxlPolicy,
+    guestType: data.guestType,
 
     guestInfo: {
-      firstName: guest.firstName || "Test",
-      lastName: guest.lastName || "Guest",
-      emailAddress: guest.emailAddress,
-      phoneNumber: guest.CellNumber || guest.PhoneNumber,
-      guestProfID: guest.guestProfID,
-      addressLine1: guest.addressLine1,
-      addressLine2: guest.addressLine2,
-      cityName: guest.cityName,
-      stateProvinceCode: guest.stateProvinceCode,
-      postalCode: guest.postalCode,
-      countryCode: guest.countryCode,
+      firstName: guest.firstName,
+      lastName: guest.lastName,
+      emailAddress: guest.emailAddress || "",
+      phoneNumber: guest.CellNumber || guest.PhoneNumber || "",
+      guestProfID: guest.guestProfID || "",
+      addressLine1: guest.addressLine1 || "",
+      addressLine2: guest.addressLine2 || "",
+      cityName: guest.cityName || "",
+      stateProvinceCode: guest.stateProvinceCode || "",
+      postalCode: guest.postalCode || "",
+      countryCode: guest.countryCode || "",
     },
 
     stayInfo: {
-      arrivalDate: stay?.arrivalDate,
-      departureDate: stay?.departureDate,
+      arrivalDate: stay.arrivalDate,
+      departureDate: stay.departureDate,
       adults: stay?.guestCounts?.adults || 1,
       children: stay?.guestCounts?.children || 0,
     },
@@ -68,76 +43,78 @@ const mapAgilysysResponse = (apiResponse) => {
     offers: {
       villaType: offers.roomType,
       villaNumber: offers.roomNum,
+      price: offers.price, // Tentative, Duetto
     },
   };
 };
 
-// 3. MAIN HANDLER
 exports.webhook = async (req, res) => {
   try {
     const event = req.body;
 
-    // Hunt for the ID
-    const confirmationId = findConfirmationId(event);
+    const confirmationNumber = event.confirmationNumber;
 
-    if (!confirmationId) {
+    if (!confirmationNumber) {
       console.warn("SKIPPED: Webhook received but no Confirmation ID found.");
       return res.status(200).send("Skipped - No ID");
     }
 
-    // Get full reservation data
-    const fullReservationData = await agilysysService.getReservation(
-      confirmationId,
-      event.guestInfo.lastName,
-    );
+    const fullReservationData =
+      event ||
+      (await agilysysService.getReservation(
+        confirmationNumber,
+        event.guestInfo.lastName,
+      ));
 
     if (!fullReservationData) {
       console.error(
-        `FETCH FAILED: Could not retrieve details for ${confirmationId}`,
+        `FETCH FAILED: Could not retrieve details for ${confirmationNumber}`,
       );
-      // Return 200 to prevent infinite retries
       return res.status(200).send("Fetch Failed");
     }
 
-    // Get spa items
-    const spaData = await agilysysService.getSpaAppointment(confirmationId);
+    // const spaData = await agilysysService.getSpaAppointment(confirmationNumber);
 
     const mergedData = {
       ...fullReservationData,
-      spaItems: spaData,
+      // spaItems: spaData,
     };
 
-    // Map the clean data
     const cleanData = mapAgilysysResponse(mergedData);
 
-    // Determine action based on event type OR status
     let eventType = event.eventType;
+
     if (!eventType) {
-      if (cleanData.status === "Canceled") eventType = "RESERVATION_CANCELLED";
-      else eventType = "RESERVATION_UPDATED";
+      if (cleanData.status === "canceled") eventType = "CancelReservation";
+      else eventType = "ModifyReservation";
     }
 
     switch (eventType) {
-      case "RESERVATION_CREATED":
-      case "RESERVATION_UPDATED":
-      case "CHECK_IN":
-        await syncService.syncReservation(cleanData);
+      case "NewReservation":
+      case "ModifyReservation":
+        await syncService.upsertReservation(cleanData);
         break;
 
-      case "RESERVATION_CANCELLED":
-        await syncService.handleCancellation(cleanData);
+      case "CheckedInReservation":
+        await syncService.updateStatus(cleanData, "arrived", "1270278403");
+        break;
+      case "CheckedOutReservation":
+        await syncService.updateStatus(cleanData, "departed", "1270278404");
+        break;
+      case "CancelReservation":
+        await syncService.updateStatus(cleanData, "canceled", "closedlost");
         break;
 
       default:
-        if (cleanData.status === "Canceled") {
-          await syncService.handleCancellation(cleanData);
+        if (cleanData.status === "canceled") {
+          await syncService.updateStatus(cleanData);
         } else {
-          await syncService.syncReservation(cleanData);
+          await syncService.upsertReservation(cleanData);
         }
         break;
     }
 
-    res.status(200).json({ success: true, id: confirmationId });
+    res.status(200).json({ success: true, id: confirmationNumber });
   } catch (err) {
     console.error("WEBHOOK ERROR:", err.message);
     res.status(500).json({ error: err.message });

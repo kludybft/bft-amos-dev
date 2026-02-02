@@ -16,12 +16,13 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
       dealname: `${data.lastName} ${logId}`,
       confirmation_number: data.confirmationNumber,
       arrival_date: data.arrivalDate,
+      departure_date: data.departureDate,
       villa_type: data.villaType,
       villa: data.villaNumber,
       origin_code: data.origin,
       segment_1: data.segment,
-      deposit_schedule: data.depositSchedule, // not sure if createDate is the right one here,
-      // cxl_policy: data.cxlPolicy, no cxl policy yet on Agilysys Versa Book API response
+      deposit_schedule: data.depositSchedule,
+      cxl_policy: data.cxlPolicy,
       guest_type: data.guestType,
       ...extraUpdates,
     };
@@ -167,29 +168,22 @@ async function deleteAssociatedLineItems(dealId) {
 async function createUnifiedLineItem(dealId, item) {
   const properties = {
     // Standard HubSpot Fields
-    confirmation_number: item.confirmationNumber || null,
-    name: item.dealItemName,
-    price: item.price || "0",
     quantity: "1",
 
-    // Common Custom Fields
-    item_type: item.itemType || null,
-    tax_amount: item.taxAmount || null,
-    deposit_policy: item.depositPolicy || null,
-    // sales_rep_hs_id: item.salesRepHsId || null,
-    sales_rep_ag_id: item.salesRepAgId || null,
+    sales_rep_ag_id: item.salesRepAgId,
+    deal_item_name: item.dealItemName,
+    item_type: item.itemType,
+    villa_type: item.villaType || null,
+    price: item.price || 0,
+    date_of_night: item.dateOfNight || null,
+    deposit_policy: item.depositPolicy,
 
-    // Spa Specific Fields
-    // start_date_time: item.startDateTime || null,
-    // end_date_time: item.endDateTime || null,
+    tax_amount: item.taxAmount || null,
+    post_type: item.postType || null,
+
     spa_service: item.spaService || null,
     gratuity_amount: item.gratuityAmount || null,
     therapist_id: item.therapistId || null,
-
-    // Existing Specific Fields
-    date_of_night: item.dateOfNight || null,
-    villa_type: item.villaType || null,
-    post_type: item.postType || null,
     assigned_room: item.assignedRoom || null,
   };
 

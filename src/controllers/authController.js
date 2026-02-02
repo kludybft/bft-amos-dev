@@ -1,10 +1,10 @@
 const axios = require("axios");
 const config = require("../config/env");
 const tokenService = require("../services/tokenService");
-const agilysysService = require("../services/agilysysService");
 
 exports.login = (req, res) => {
-  const scopes = "properties:read";
+  const scopes =
+    "customers:read,customers:write,properties:read,properties:write";
 
   const params = new URLSearchParams({
     client_id: config.AKIA.CLIENT_ID,
