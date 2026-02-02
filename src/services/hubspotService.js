@@ -49,7 +49,6 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
 
       // Add "Create-only" defaults
       dealProperties.pipeline = HS.default_pipeline;
-      dealProperties.dealstage = HS.initial_stage;
 
       const createRes = await axios.post(
         "https://api.hubapi.com/crm/v3/objects/deals",
