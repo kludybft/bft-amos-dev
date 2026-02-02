@@ -140,23 +140,23 @@ async function deleteAssociatedLineItems(dealId) {
   try {
     // 1. Get associated line items
     const assocRes = await axios.get(
-      `https://api.hubapi.com/crm/v3/objects/deals/${dealId}/associations/line_items`,
+      `https://api.hubapi.com/crm/v3/objects/deals/${dealId}/associations/2-56446275`,
       { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
     );
 
     const results = assocRes.data.results;
     if (!results || results.length === 0) return;
 
-    const lineItemIds = results.map((r) => ({ id: r.id }));
+    const dealItemIds = results.map((r) => ({ id: r.id }));
 
     // 2. Batch Delete
     await axios.post(
-      "https://api.hubapi.com/crm/v3/objects/line_items/batch/archive",
-      { inputs: lineItemIds },
+      "https://api.hubapi.com/crm/v3/objects/2-56446275/batch/archive",
+      { inputs: dealItemIds },
       { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
     );
 
-    console.log(`HubSpot: Cleared ${lineItemIds.length} old line items.`);
+    console.log(`HubSpot: Cleared ${dealItemIds.length} old line items.`);
   } catch (e) {
     if (e.response?.status !== 404) {
       console.warn("HubSpot Line Item Cleanup Warning:", e.message);
@@ -170,7 +170,7 @@ async function createUnifiedLineItem(dealId, item) {
     // Standard HubSpot Fields
     quantity: "1",
 
-    sales_rep_ag_id: item.salesRepAgId,
+    sales_rep_agilysys_id: item.salesRepAgId,
     deal_item_name: item.dealItemName,
     item_type: item.itemType,
     villa_type: item.villaType || null,
@@ -194,8 +194,8 @@ async function createUnifiedLineItem(dealId, item) {
         to: { id: dealId },
         types: [
           {
-            associationCategory: "HUBSPOT_DEFINED",
-            associationTypeId: 20,
+            associationCategory: "USER_DEFINED",
+            associationTypeId: 124,
           },
         ],
       },
@@ -204,7 +204,7 @@ async function createUnifiedLineItem(dealId, item) {
 
   try {
     await axios.post(
-      "https://api.hubapi.com/crm/v3/objects/line_items",
+      "https://api.hubapi.com/crm/v3/objects/2-56446275",
       payload,
       { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
     );
