@@ -23,7 +23,7 @@ const mapAgilysysResponse = (apiResponse) => {
       firstName: guest.firstName,
       lastName: guest.lastName,
       emailAddress: guest.emailAddress || "",
-      phoneNumber: guest.CellNumber || guest.PhoneNumber || "",
+      phoneNumber: guest.cellNumber || guest.phoneNumber || "",
       guestProfID: guest.guestProfID || "",
       addressLine1: guest.addressLine1 || "",
       addressLine2: guest.addressLine2 || "",

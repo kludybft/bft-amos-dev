@@ -41,7 +41,7 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
         { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
       );
 
-      // 2. Clear old line items
+      // 2. Clear old deal items
       // If dates changed, we must remove old "Night" items to avoid duplicates.
       await deleteAssociatedLineItems(currentDealId);
     } else {
@@ -59,12 +59,12 @@ exports.pushDeal = async (data, extraUpdates = {}) => {
       currentDealId = createRes.data.id;
     }
 
-    // D. PROCESS LINE ITEMS (Nights, Add-ons, Spa)
+    // D. PROCESS deal ITEMS (Nights, Add-ons, Spa)
     const itemsToProcess = data.items || [];
 
     if (currentDealId && itemsToProcess.length > 0) {
       console.log(
-        `HubSpot: Adding ${itemsToProcess.length} line items to Deal ${currentDealId}`,
+        `HubSpot: Adding ${itemsToProcess.length} deal items to Deal ${currentDealId}`,
       );
 
       for (const item of itemsToProcess) {
@@ -134,10 +134,10 @@ async function findDealIdByConfirmationNumber(confNum) {
   }
 }
 
-// Helper: Delete all line items associated with a deal
+// Helper: Delete all deal items associated with a deal
 async function deleteAssociatedLineItems(dealId) {
   try {
-    // 1. Get associated line items
+    // 1. Get associated deal items
     const assocRes = await axios.get(
       `https://api.hubapi.com/crm/v3/objects/deals/${dealId}/associations/2-56446275`,
       { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
@@ -155,7 +155,7 @@ async function deleteAssociatedLineItems(dealId) {
       { headers: { Authorization: `Bearer ${config.HUBSPOT.TOKEN}` } },
     );
 
-    console.log(`HubSpot: Cleared ${dealItemIds.length} old line items.`);
+    console.log(`HubSpot: Cleared ${dealItemIds.length} old deal items.`);
   } catch (e) {
     if (e.response?.status !== 404) {
       console.warn("HubSpot Line Item Cleanup Warning:", e.message);
@@ -166,9 +166,6 @@ async function deleteAssociatedLineItems(dealId) {
 // Helper: Create a single Line Item and associate it
 async function createUnifiedLineItem(dealId, item) {
   const properties = {
-    // Standard HubSpot Fields
-    quantity: "1",
-
     sales_rep_agilysys_id: item.salesRepAgId,
     deal_item_name: item.dealItemName,
     item_type: item.itemType,
@@ -194,7 +191,7 @@ async function createUnifiedLineItem(dealId, item) {
         types: [
           {
             associationCategory: "USER_DEFINED",
-            associationTypeId: 124,
+            associationTypeId: 123,
           },
         ],
       },
@@ -209,7 +206,7 @@ async function createUnifiedLineItem(dealId, item) {
     );
   } catch (error) {
     console.error(
-      ` ! Failed to create item "${item.dealItemName}":`,
+      `Failed to create item "${item.dealItemName}":`,
       error.response?.data?.message || error.message,
     );
   }

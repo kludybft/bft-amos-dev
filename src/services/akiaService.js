@@ -13,6 +13,7 @@ exports.send = async (endpoint, payload, method = "POST") => {
         access_token: accessToken,
       },
     });
+    console.log(res.data);
     return res.data;
   } catch (e) {
     console.error(`Akia Failed: ${e.response?.status || e.message}`);

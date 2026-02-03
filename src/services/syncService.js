@@ -5,7 +5,7 @@ const config = require("../config/env");
 const HS = config.HUBSPOT.PIPELINE_CONFIG;
 
 const getAkiaData = async (dealData) => {
-  const akiaGuest = await akiaService.send("/v3/customers", {
+  const akiaGuest = await akiaService.send("v3/customers", {
     first_name: dealData.guestInfo.firstName,
     last_name: dealData.guestInfo.lastName,
     email: dealData.guestInfo.emailAddress,
@@ -16,7 +16,7 @@ const getAkiaData = async (dealData) => {
 
   if (!akiaGuest?.id) return { akiaGuest: null, reservation: null };
 
-  const reservation = await akiaService.send("/v4/reservations", {
+  const reservation = await akiaService.send("v4/reservations", {
     customer_id: akiaGuest.id,
     arrival_date: dealData.stayInfo.arrivalDate,
     departure_date: dealData.stayInfo.departureDate,
@@ -34,7 +34,7 @@ const getAkiaDataViaSearch = async (dealData) => {
     confirmation_number: dealData.confirmationNumber,
   });
 
-  return await akiaService.send(`/v4/reservations/search?${params}`);
+  return await akiaService.send(`v4/reservations/search?${params}`);
 };
 
 exports.upsertReservation = async (dealData) => {
@@ -135,7 +135,7 @@ exports.updateStatus = async (dealData, status, stage) => {
       const reservation = await getAkiaDataViaSearch(dealData);
 
       if (reservation?.id) {
-        await akiaService.send(`/v4/reservations/${reservation.id}`, {
+        await akiaService.send(`v4/reservations/${reservation.id}`, {
           status: status,
         });
       }
