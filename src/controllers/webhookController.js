@@ -49,74 +49,65 @@ const mapAgilysysResponse = (apiResponse) => {
 };
 
 exports.webhook = async (req, res) => {
-  try {
-    const event = req.body;
+  console.log("Webhook received:", JSON.stringify(req.body, null, 2));
 
-    const confirmationNumber = event.confirmationNumber;
+  res.sendStatus(200);
 
-    if (!confirmationNumber) {
-      console.warn("SKIPPED: Webhook received but no Confirmation ID found.");
-      return res.status(200).send("Skipped - No ID");
-    }
-
-    const fullReservationData =
-      event ||
-      (await agilysysService.getReservation(
-        confirmationNumber,
-        event.guestInfo.lastName,
-      ));
-
-    if (!fullReservationData) {
-      console.error(
-        `FETCH FAILED: Could not retrieve details for ${confirmationNumber}`,
-      );
-      return res.status(200).send("Fetch Failed");
-    }
-
-    // const spaData = await agilysysService.getSpaAppointment(confirmationNumber);
-
-    const mergedData = {
-      ...fullReservationData,
-      // spaItems: spaData,
-    };
-
-    const cleanData = mapAgilysysResponse(mergedData);
-
-    let eventType = event.eventType;
-
-    if (!eventType) {
-      if (cleanData.status === "canceled") eventType = "CancelReservation";
-      else eventType = "ModifyReservation";
-    }
-
-    switch (eventType) {
-      case "NewReservation":
-      case "ModifyReservation":
-        await syncService.upsertReservation(cleanData);
-        break;
-
-      case "CheckedInReservation":
-        await syncService.updateStatus(cleanData, "arrived", "1270278403");
-        break;
-      case "CheckedOutReservation":
-        await syncService.updateStatus(cleanData, "departed", "1270278404");
-        break;
-      case "CancelReservation":
-        await syncService.updateStatus(cleanData, "canceled", "closedlost");
-        break;
-
-      default:
-        if (cleanData.status === "canceled") {
-          await syncService.updateStatus(cleanData);
-        } else {
-          await syncService.upsertReservation(cleanData);
-        }
-        break;
-    }
-
-    res.status(200).json({ success: true, id: confirmationNumber });
-  } catch (err) {
-    console.error("WEBHOOK ERROR:", err.message);
-    res.status(500).json({ error: err.message });
-  }
+  // try {
+  //   const event = req.body;
+  //   const confirmationNumber = event.confirmationNumber;
+  //   if (!confirmationNumber) {
+  //     console.warn("SKIPPED: Webhook received but no Confirmation ID found.");
+  //     return res.status(200).send("Skipped - No ID");
+  //   }
+  //   const fullReservationData =
+  //     event ||
+  //     (await agilysysService.getReservation(
+  //       confirmationNumber,
+  //       event.guestInfo.lastName,
+  //     ));
+  //   if (!fullReservationData) {
+  //     console.error(
+  //       `FETCH FAILED: Could not retrieve details for ${confirmationNumber}`,
+  //     );
+  //     return res.status(200).send("Fetch Failed");
+  //   }
+  //   // const spaData = await agilysysService.getSpaAppointment(confirmationNumber);
+  //   const mergedData = {
+  //     ...fullReservationData,
+  //     // spaItems: spaData,
+  //   };
+  //   const cleanData = mapAgilysysResponse(mergedData);
+  //   let eventType = event.eventType;
+  //   if (!eventType) {
+  //     if (cleanData.status === "canceled") eventType = "CancelReservation";
+  //     else eventType = "ModifyReservation";
+  //   }
+  //   switch (eventType) {
+  //     case "NewReservation":
+  //     case "ModifyReservation":
+  //       await syncService.upsertReservation(cleanData);
+  //       break;
+  //     case "CheckedInReservation":
+  //       await syncService.updateStatus(cleanData, "arrived", "1270278403");
+  //       break;
+  //     case "CheckedOutReservation":
+  //       await syncService.updateStatus(cleanData, "departed", "1270278404");
+  //       break;
+  //     case "CancelReservation":
+  //       await syncService.updateStatus(cleanData, "canceled", "closedlost");
+  //       break;
+  //     default:
+  //       if (cleanData.status === "canceled") {
+  //         await syncService.updateStatus(cleanData);
+  //       } else {
+  //         await syncService.upsertReservation(cleanData);
+  //       }
+  //       break;
+  //   }
+  //   res.status(200).json({ success: true, id: confirmationNumber });
+  // } catch (err) {
+  //   console.error("WEBHOOK ERROR:", err.message);
+  //   res.status(500).json({ error: err.message });
+  // }
 };
