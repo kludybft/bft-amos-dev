@@ -38,6 +38,7 @@ const mapper = (resData) => {
       villaType: offers.roomType,
       villaNumber: offers.roomNum,
       price: offers.price, // Tentative, Duetto
+      nights: offers.nights || 1,
     },
   };
 };

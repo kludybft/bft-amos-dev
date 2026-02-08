@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const axios = require("axios");
 
-// 1. Mock Axios globally
 jest.mock("axios");
 
 const app = require("../src/server");
@@ -11,7 +10,6 @@ const Token = require("../src/models/Token");
 
 let mongoServer;
 
-//  GLOBAL SETUP & TEARDOWN
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const uri = mongoServer.getUri();
@@ -24,16 +22,11 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
-//  PER-TEST CLEANUP
 afterEach(async () => {
   jest.clearAllMocks();
   await Token.deleteMany({});
 });
 
-/**
- * HELPER: SEED AUTH TOKEN
- * We seed the DB so your 'tokenService' doesn't block the request.
- */
 const seedAuthToken = async () => {
   await Token.create({
     _id: "akia_auth",
@@ -43,23 +36,28 @@ const seedAuthToken = async () => {
   });
 };
 
-/**
- * HELPER: MOCK EXTERNAL APIs
- * This sets up the "World" for the test.
- */
 const mockExternalApis = (agilysysOverrides = {}, folioItems = []) => {
-  // 1. Mock Agilysys Auth (Booking & Spa)
   axios.post.mockImplementation((url) => {
-    if (url.includes("rguest"))
+    if (url.includes("rguest")) {
       return Promise.resolve({ data: { BearerToken: "mock-token" } });
-    if (url.includes("hubapi"))
-      return Promise.resolve({ data: { id: "new-deal-123" } }); // HubSpot Create
+    }
+
+    if (url.includes("deals/search")) {
+      return Promise.resolve({
+        data: {
+          results: [{ id: "existing-deal-123" }],
+        },
+      });
+    }
+
+    if (url.includes("objects/deals")) {
+      return Promise.resolve({ data: { id: "new-deal-123" } });
+    }
+
     return Promise.resolve({ data: {} });
   });
 
-  // 2. Mock GET Requests (Agilysys Data Fetching)
   axios.get.mockImplementation((url) => {
-    // A. Reservation Details
     if (url.includes("GetReservation")) {
       return Promise.resolve({
         data: {
@@ -68,26 +66,28 @@ const mockExternalApis = (agilysysOverrides = {}, folioItems = []) => {
           guestInfo: { firstName: "Granular", lastName: "Test" },
           stayInfo: {
             arrivalDate: "2023-12-01",
-            departureDate: "2023-12-04", // 3 Nights
+            departureDate: "2023-12-04",
             guestCounts: { adults: 2, children: 0 },
           },
-          offers: { roomType: "OceanView", price: 1000, nights: 3 }, // Explicitly setting nights for logic test
+          offers: {
+            roomType: "OceanView",
+            price: 1000,
+            nights: 3,
+            ...agilysysOverrides.offers,
+          },
           ...agilysysOverrides,
         },
       });
     }
-    // B. Folio Items (Spa, Add-ons)
     if (url.includes("FolioDetails")) {
       return Promise.resolve({ data: folioItems });
     }
-    // C. HubSpot Associations
     if (url.includes("associations")) {
       return Promise.resolve({ data: { results: [] } });
     }
     return Promise.resolve({ data: {} });
   });
 
-  // 3. Mock PATCH (HubSpot Updates)
   axios.patch.mockResolvedValue({ data: {} });
 };
 
@@ -103,11 +103,10 @@ describe("Integration: Comprehensive Webhook Logic", () => {
       .post("/webhook")
       .send({ eventType: "NewReservation" });
     expect(res.text).toBe("No confirmation ID available");
-    expect(axios.get).not.toHaveBeenCalled(); // Ensure no API calls were wasted
+    expect(axios.get).not.toHaveBeenCalled();
   });
 
   it("Flow 2: Agilysys Failure - Should handle 404 from Hotel System gracefully", async () => {
-    // Mock Agilysys returning 404
     axios.post.mockResolvedValue({ data: { BearerToken: "token" } });
     axios.get.mockRejectedValue({ response: { status: 404 } });
 
@@ -125,7 +124,6 @@ describe("Integration: Comprehensive Webhook Logic", () => {
   //  2. BUSINESS LOGIC: UPSERT (Create/Update)
 
   it("Flow 3: NewReservation - Should calculate NIGHTS and generate Line Items correctly", async () => {
-    // Scenario: 3 Night Stay (Dec 1 to Dec 4)
     mockExternalApis({}, []);
 
     await request(app)
@@ -136,13 +134,10 @@ describe("Integration: Comprehensive Webhook Logic", () => {
         guestInfo: { lastName: "Test" },
       });
 
-    // Check HubSpot Calls for Line Items
-    // We expect 3 calls to create "Night" items (Dec 1, Dec 2, Dec 3)
     const hubSpotCalls = axios.post.mock.calls.filter((call) =>
       call[0].includes("objects/2-56446275"),
     );
 
-    // Filter specifically for "Night" items
     const nightItems = hubSpotCalls.filter(
       (call) => call[1].properties.item_type === "night",
     );
@@ -153,17 +148,16 @@ describe("Integration: Comprehensive Webhook Logic", () => {
   });
 
   it("Flow 4: Spa vs Add-on Logic - Should distinguish items based on properties", async () => {
-    // Scenario: 1 Spa Treatment and 1 Champagne Add-on
     const mockFolio = [
       {
         price: 150,
-        therapistId: "Tera123", // This triggers "isSpaItem" logic
+        therapistId: "Tera123",
         dealItemName: "Deep Tissue",
       },
       {
         price: 50,
         dealItemName: "Champagne",
-        itemType: "addon", // No therapist, standard addon
+        itemType: "addon",
       },
     ];
 
@@ -181,19 +175,17 @@ describe("Integration: Comprehensive Webhook Logic", () => {
       call[0].includes("objects/2-56446275"),
     );
 
-    // Check for Spa Item
     const spaItem = hubSpotCalls.find(
       (call) => call[1].properties.item_type === "spa",
     );
     expect(spaItem).toBeDefined();
     expect(spaItem[1].properties.therapist_id).toBe("Tera123");
 
-    // Check for Add-on Item
     const addonItem = hubSpotCalls.find(
       (call) => call[1].properties.item_type === "addon",
     );
     expect(addonItem).toBeDefined();
-    expect(addonItem[1].properties.deal_item_name).toBe("Add-on"); // Based on your code logic
+    expect(addonItem[1].properties.deal_item_name).toBe("Add-on");
   });
 
   //  3. BUSINESS LOGIC: STATUS UPDATES
@@ -209,7 +201,6 @@ describe("Integration: Comprehensive Webhook Logic", () => {
         guestInfo: { lastName: "Test" },
       });
 
-    // Verify PATCH request to HubSpot Deal
     expect(axios.patch).toHaveBeenCalledWith(
       expect.stringContaining("objects/deals"),
       expect.objectContaining({
@@ -261,7 +252,6 @@ describe("Integration: Comprehensive Webhook Logic", () => {
   //  4. EDGE CASE: THE "DEFAULT" FALLBACK
 
   it("Flow 8: Unknown Event Type - Should fallback to Agilysys Status (CANCELED)", async () => {
-    // Scenario: Event is "SomeWeirdEvent", but Agilysys says status is "canceled"
     mockExternalApis({ status: "canceled" });
 
     await request(app)
@@ -272,7 +262,6 @@ describe("Integration: Comprehensive Webhook Logic", () => {
         guestInfo: { lastName: "Test" },
       });
 
-    // Should trigger the cancellation logic because Agilysys status is 'canceled'
     expect(axios.patch).toHaveBeenCalledWith(
       expect.stringContaining("objects/deals"),
       expect.objectContaining({
@@ -283,7 +272,6 @@ describe("Integration: Comprehensive Webhook Logic", () => {
   });
 
   it("Flow 9: Unknown Event Type - Should fallback to Upsert if Agilysys is Active", async () => {
-    // Scenario: Event is "SomeWeirdEvent", Agilysys says "RESERVED"
     mockExternalApis({ status: "RESERVED" });
 
     await request(app)
@@ -294,7 +282,6 @@ describe("Integration: Comprehensive Webhook Logic", () => {
         guestInfo: { lastName: "Test" },
       });
 
-    // Should trigger UPSERT (Post to create deal)
     expect(axios.post).toHaveBeenCalledWith(
       expect.stringContaining("objects/deals"),
       expect.anything(),
