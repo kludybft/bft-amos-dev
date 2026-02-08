@@ -40,8 +40,8 @@ const getAkiaDataViaSearch = async (dealData) => {
 exports.upsertReservation = async (dealData) => {
   try {
     const numberOfNights = Number(dealData.offers.nights) || 1;
-    const allLineItems = [];
     const salesReps = { salesRepAgId: dealData.salesRepAgId };
+    const allLineItems = [];
 
     const arrival = new Date(dealData.stayInfo.arrivalDate);
 
@@ -61,29 +61,37 @@ exports.upsertReservation = async (dealData) => {
       });
     }
 
-    const addOns = (dealData?.addOnItems || []).map((item) => ({
-      ...salesReps,
-      dealItemName: "Add-on",
-      itemType: "addon",
-      price: item.price,
-      taxAmount: item.taxAmount,
-      postType: item.postType,
-      depositPolicy: item.depositPolicy,
-    }));
+    const dealItems = dealData?.dealItems || [];
 
-    const spaItems = (dealData?.spaItems || []).map((item) => ({
-      ...salesReps,
-      dealItemName: "Spa Appointment",
-      itemType: "spa",
-      spaService: item?.activityDetail?.activityName,
-      price: item.price,
-      gratuityAmount: item.gratuityAmount,
-      therapistId: item.therapistId,
-      assignedRoom: item.assignedRoom,
-      depositPolicy: item.depositPolicy,
-    }));
+    dealItems.forEach((item) => {
+      const baseItem = {
+        ...salesReps,
+        price: item.price,
+        depositPolicy: item.depositPolicy,
+      };
 
-    allLineItems.push(...addOns, ...spaItems);
+      const isSpaItem = item?.activityDetail?.activityName || item.therapistId;
+
+      if (isSpaItem) {
+        allLineItems.push({
+          ...baseItem,
+          dealItemName: "Spa Appointment",
+          itemType: "spa",
+          spaService: item?.activityDetail?.activityName,
+          gratuityAmount: item.gratuityAmount,
+          therapistId: item.therapistId,
+          assignedRoom: item.assignedRoom,
+        });
+      } else {
+        allLineItems.push({
+          ...baseItem,
+          dealItemName: "Add-on",
+          itemType: "addon",
+          taxAmount: item.taxAmount,
+          postType: item.postType,
+        });
+      }
+    });
 
     // A. Akia sync
     let akiaLink = null;

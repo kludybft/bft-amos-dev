@@ -8,13 +8,16 @@ const app = express();
 // Middleware
 app.use(express.json());
 
-// Database
-connectDB();
-
 // Routes
 app.use("/", apiRoutes);
 
-// Start Server
-app.listen(config.PORT, () => {
-  console.log(`Bridge running on port ${config.PORT}`);
-});
+// Conditional Start: Only connect and listen if this file is run directly.
+// This prevents tests from starting the server and connecting to the live DB prematurely.
+if (require.main === module) {
+  connectDB();
+  app.listen(config.PORT, () => {
+    console.log(`Bridge running on port ${config.PORT}`);
+  });
+}
+
+module.exports = app;

@@ -1,8 +1,8 @@
 const syncService = require("../services/syncService");
 const agilysysService = require("../services/agilysysService");
 
-const mapAgilysysResponse = (apiResponse) => {
-  const data = apiResponse;
+const mapper = (resData) => {
+  const data = resData;
 
   const guest = data.guestInfo || {};
 
@@ -25,12 +25,6 @@ const mapAgilysysResponse = (apiResponse) => {
       emailAddress: guest.emailAddress || "",
       phoneNumber: guest.cellNumber || guest.phoneNumber || "",
       guestProfID: guest.guestProfID || "",
-      addressLine1: guest.addressLine1 || "",
-      addressLine2: guest.addressLine2 || "",
-      cityName: guest.cityName || "",
-      stateProvinceCode: guest.stateProvinceCode || "",
-      postalCode: guest.postalCode || "",
-      countryCode: guest.countryCode || "",
     },
 
     stayInfo: {
@@ -49,65 +43,63 @@ const mapAgilysysResponse = (apiResponse) => {
 };
 
 exports.webhook = async (req, res) => {
-  console.log("Webhook received:", JSON.stringify(req.body, null, 2));
+  try {
+    const event = req.body;
 
-  res.sendStatus(200);
+    const confirmationNumber = event.confirmationNumber;
 
-  // try {
-  //   const event = req.body;
-  //   const confirmationNumber = event.confirmationNumber;
-  //   if (!confirmationNumber) {
-  //     console.warn("SKIPPED: Webhook received but no Confirmation ID found.");
-  //     return res.status(200).send("Skipped - No ID");
-  //   }
-  //   const fullReservationData =
-  //     event ||
-  //     (await agilysysService.getReservation(
-  //       confirmationNumber,
-  //       event.guestInfo.lastName,
-  //     ));
-  //   if (!fullReservationData) {
-  //     console.error(
-  //       `FETCH FAILED: Could not retrieve details for ${confirmationNumber}`,
-  //     );
-  //     return res.status(200).send("Fetch Failed");
-  //   }
-  //   // const spaData = await agilysysService.getSpaAppointment(confirmationNumber);
-  //   const mergedData = {
-  //     ...fullReservationData,
-  //     // spaItems: spaData,
-  //   };
-  //   const cleanData = mapAgilysysResponse(mergedData);
-  //   let eventType = event.eventType;
-  //   if (!eventType) {
-  //     if (cleanData.status === "canceled") eventType = "CancelReservation";
-  //     else eventType = "ModifyReservation";
-  //   }
-  //   switch (eventType) {
-  //     case "NewReservation":
-  //     case "ModifyReservation":
-  //       await syncService.upsertReservation(cleanData);
-  //       break;
-  //     case "CheckedInReservation":
-  //       await syncService.updateStatus(cleanData, "arrived", "1270278403");
-  //       break;
-  //     case "CheckedOutReservation":
-  //       await syncService.updateStatus(cleanData, "departed", "1270278404");
-  //       break;
-  //     case "CancelReservation":
-  //       await syncService.updateStatus(cleanData, "canceled", "closedlost");
-  //       break;
-  //     default:
-  //       if (cleanData.status === "canceled") {
-  //         await syncService.updateStatus(cleanData);
-  //       } else {
-  //         await syncService.upsertReservation(cleanData);
-  //       }
-  //       break;
-  //   }
-  //   res.status(200).json({ success: true, id: confirmationNumber });
-  // } catch (err) {
-  //   console.error("WEBHOOK ERROR:", err.message);
-  //   res.status(500).json({ error: err.message });
-  // }
+    if (!confirmationNumber) {
+      return res.status(200).send("No confirmation ID available");
+    }
+
+    const reservationData = await agilysysService.getReservation(
+      confirmationNumber,
+      event.guestInfo.lastName,
+    );
+
+    if (!reservationData) {
+      console.error(
+        `FETCH FAILED: Could not retrieve details for ${confirmationNumber}`,
+      );
+      return res.status(200).send("Fetch Failed");
+    }
+
+    const dealItemData = await agilysysService.getFolio(confirmationNumber);
+
+    const trimmedReservationData = mapper(reservationData);
+
+    const mergedData = {
+      ...trimmedReservationData,
+      dealItems: dealItemData,
+    };
+
+    let eventType = event.eventType;
+
+    switch (eventType) {
+      case "NewReservation":
+      case "ModifyReservation":
+        await syncService.upsertReservation(mergedData);
+        break;
+      case "CheckedInReservation":
+        await syncService.updateStatus(mergedData, "arrived", "1270278403");
+        break;
+      case "CheckedOutReservation":
+        await syncService.updateStatus(mergedData, "departed", "1270278404");
+        break;
+      case "CancelReservation":
+        await syncService.updateStatus(mergedData, "canceled", "closedlost");
+        break;
+      default:
+        if (mergedData.status === "canceled") {
+          await syncService.updateStatus(mergedData, "canceled", "closedlost");
+        } else {
+          await syncService.upsertReservation(mergedData);
+        }
+        break;
+    }
+    res.status(200).json({ success: true, id: confirmationNumber });
+  } catch (err) {
+    console.error("WEBHOOK ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 };

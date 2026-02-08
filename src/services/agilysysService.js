@@ -64,6 +64,28 @@ exports.getReservation = async (confirmationNumber, guestName) => {
   }
 };
 
+exports.getFolio = async (confNo) => {
+  try {
+    const { token, session } = await exports.getBookingAuth();
+    const headers = { Authorization: `Bearer ${token}` };
+    if (session) headers["SessionId"] = session;
+
+    const res = await axios.get(`${config.AGILYSYS.FOLIO_URL}/${confNo}`, {
+      headers,
+    });
+
+    return res.data;
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      console.log("No folio found.");
+      return [];
+    }
+
+    console.warn("Folio API Error:", error.message);
+    return [];
+  }
+};
+
 exports.getSpaAppointment = async (source) => {
   try {
     const { token, session } = await exports.getSpaAuth();
