@@ -6,11 +6,11 @@ const HS = config.HUBSPOT.PIPELINE_CONFIG;
 
 const getAkiaData = async (dealData) => {
   const akiaGuest = await akiaService.send("v3/customers", {
-    first_name: dealData.guestInfo.firstName,
-    last_name: dealData.guestInfo.lastName,
-    email: dealData.guestInfo.emailAddress,
-    phone_number: dealData.guestInfo.phoneNumber,
-    extern_id: dealData.guestInfo.guestProfID,
+    first_name: dealData.firstName,
+    last_name: dealData.lastName,
+    email: dealData.emailAddress,
+    phone_number: dealData.phoneNumber,
+    extern_id: dealData.guestProfID,
     property_id: 1387,
   });
 
@@ -18,10 +18,10 @@ const getAkiaData = async (dealData) => {
 
   const reservation = await akiaService.send("v4/reservations", {
     customer_id: akiaGuest.id,
-    arrival_date: dealData.stayInfo.arrivalDate,
-    departure_date: dealData.stayInfo.departureDate,
+    arrival_date: dealData.arrivalDate,
+    departure_date: dealData.departureDate,
     extern_id: dealData.confirmationNumber,
-    room_type: dealData.offers?.villaType,
+    room_type: dealData.villaType,
   });
 
   return { akiaGuest, reservation };
@@ -39,11 +39,11 @@ const getAkiaDataViaSearch = async (dealData) => {
 
 exports.upsertReservation = async (dealData) => {
   try {
-    const numberOfNights = Number(dealData.offers.nights) || 1;
+    const numberOfNights = Number(dealData.nights) || 1;
     const salesReps = { salesRepAgId: dealData.salesRepAgId };
     const allLineItems = [];
 
-    const arrival = new Date(dealData.stayInfo.arrivalDate);
+    const arrival = new Date(dealData.arrivalDate);
 
     for (let i = 0; i < numberOfNights; i++) {
       const currentNightDate = new Date(arrival);
@@ -54,8 +54,8 @@ exports.upsertReservation = async (dealData) => {
         ...salesReps,
         dealItemName: `Night ${i + 1} - ${formattedDate}`,
         itemType: "night",
-        villaType: dealData.offers.villaType,
-        price: dealData.offers.price,
+        villaType: dealData.villaType,
+        price: dealData.price,
         dateOfNight: formattedDate,
         depositPolicy: dealData.cxlPolicy,
       });
@@ -108,16 +108,16 @@ exports.upsertReservation = async (dealData) => {
     // B. Hubspot sync
     const dealPayload = {
       confirmationNumber: dealData.confirmationNumber,
-      arrivalDate: dealData.stayInfo.arrivalDate,
-      departureDate: dealData.stayInfo.departureDate,
-      villaType: dealData.offers.villaType,
-      villaNumber: dealData.offers.villaNumber,
+      arrivalDate: dealData.arrivalDate,
+      departureDate: dealData.departureDate,
+      villaType: dealData.villaType,
+      villaNumber: dealData.villaNumber,
       origin: dealData.origin,
       segment: dealData.segment,
       depositSchedule: dealData.depositSchedule,
       cxlPolicy: dealData.cxlPolicy,
       guestType: dealData.guestType,
-      lastName: dealData.guestInfo.lastName,
+      lastName: dealData.lastName,
       dealStage: "closedwon",
       items: allLineItems,
     };

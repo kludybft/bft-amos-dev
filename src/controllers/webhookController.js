@@ -1,45 +1,35 @@
 const syncService = require("../services/syncService");
 const agilysysService = require("../services/agilysysService");
 
-const mapper = (resData) => {
-  const data = resData;
-
-  const guest = data.guestInfo || {};
-
-  const offers = data.offers || {};
-
-  const stay = data.stayInfo || {};
+const mapper = (resData, webhookData) => {
+  const guest = resData.guestInfo || {};
+  const offers = resData.offers || {};
+  const stay = resData.stayInfo || {};
 
   return {
-    confirmationNumber: data.confirmationNumber,
-    status: data.status,
-    origin: data.origin,
-    segment: data.segment,
-    depositSchedule: data.depositSchedule,
-    cxlPolicy: data.cxlPolicy,
-    guestType: data.guestType,
+    confirmationNumber: resData.confirmationNumber ?? null,
+    status: resData.status ?? null,
+    origin: resData.origin ?? null,
+    segment: resData.segment ?? null,
+    depositSchedule: resData.depositSchedule ?? null,
+    cxlPolicy: resData.cxlPolicy ?? null,
+    guestType: resData.guestType ?? null,
 
-    guestInfo: {
-      firstName: guest.firstName,
-      lastName: guest.lastName,
-      emailAddress: guest.emailAddress || "",
-      phoneNumber: guest.cellNumber || guest.phoneNumber || "",
-      guestProfID: guest.guestProfID || "",
-    },
+    firstName: guest.firstName ?? null,
+    lastName: guest.lastName ?? null,
+    emailAddress: guest.emailAddress ?? null,
+    phoneNumber: guest.cellNumber || guest.phoneNumber || null,
+    guestProfID: guest.guestProfID ?? null,
 
-    stayInfo: {
-      arrivalDate: stay.arrivalDate,
-      departureDate: stay.departureDate,
-      adults: stay?.guestCounts?.adults || 1,
-      children: stay?.guestCounts?.children || 0,
-    },
+    arrivalDate: stay.arrivalDate ?? null,
+    departureDate: stay.departureDate ?? null,
+    adults: stay?.guestCounts?.adults ?? null,
+    children: stay?.guestCounts?.children ?? null,
 
-    offers: {
-      villaType: offers.roomType,
-      villaNumber: offers.roomNum,
-      price: offers.price, // Tentative, Duetto
-      nights: offers.nights || 1,
-    },
+    villaType: offers.roomType ?? null,
+    villaNumber: offers.roomNum ?? null,
+    price: offers.price ?? null,
+    nights: offers.nights ?? null,
   };
 };
 
@@ -47,7 +37,9 @@ exports.webhook = async (req, res) => {
   try {
     const event = req.body;
 
-    const confirmationNumber = event.confirmationNumber;
+    const confirmationNumber =
+      event.data.referenceIds.find((r) => r.idType === "CONFIRMATION_NUMBER")
+        ?.id ?? null;
 
     if (!confirmationNumber) {
       return res.status(200).send("No confirmation ID available");
@@ -65,9 +57,9 @@ exports.webhook = async (req, res) => {
       return res.status(200).send("Fetch Failed");
     }
 
-    const dealItemData = await agilysysService.getFolio(confirmationNumber);
+    const trimmedReservationData = mapper(reservationData, event.data);
 
-    const trimmedReservationData = mapper(reservationData);
+    const dealItemData = await agilysysService.getFolio(confirmationNumber);
 
     const mergedData = {
       ...trimmedReservationData,
@@ -76,23 +68,48 @@ exports.webhook = async (req, res) => {
 
     let eventType = event.eventType;
 
+    const STAGE_IDS = {
+      ARRIVED: "1270278403",
+      DEPARTED: "1270278404",
+      CLOSED_LOST: "closedlost",
+    };
+
     switch (eventType) {
       case "NewReservation":
       case "ModifyReservation":
         await syncService.upsertReservation(mergedData);
         break;
       case "CheckedInReservation":
-        await syncService.updateStatus(mergedData, "arrived", "1270278403");
+        await syncService.updateStatus(
+          mergedData,
+          "arrived",
+          STAGE_IDS.ARRIVED,
+        );
         break;
       case "CheckedOutReservation":
-        await syncService.updateStatus(mergedData, "departed", "1270278404");
+        await syncService.updateStatus(
+          mergedData,
+          "departed",
+          STAGE_IDS.DEPARTED,
+        );
         break;
       case "CancelReservation":
-        await syncService.updateStatus(mergedData, "canceled", "closedlost");
+        await syncService.updateStatus(
+          mergedData,
+          "canceled",
+          STAGE_IDS.CLOSED_LOST,
+        );
         break;
       default:
+        console.warn(
+          `Unhandled event type: ${eventType}, status: ${mergedData.status}`,
+        );
         if (mergedData.status === "canceled") {
-          await syncService.updateStatus(mergedData, "canceled", "closedlost");
+          await syncService.updateStatus(
+            mergedData,
+            "canceled",
+            STAGE_IDS.CLOSED_LOST,
+          );
         } else {
           await syncService.upsertReservation(mergedData);
         }
